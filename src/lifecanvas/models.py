@@ -157,8 +157,18 @@ class NisaPlan(BaseModel):
     monthly_contribution: float = Field(ge=0)
     contribution_changes: dict[int, float] = Field(default_factory=dict)
     annual_return_percent: float = Field(default=4.0, ge=-100, le=100)
-    annual_limit: float = Field(default=1_200_000, ge=0)
+    # Simplified combined NISA model: accumulation and growth investment allowances together.
+    annual_limit: float = Field(default=3_600_000, ge=0)
     lifetime_limit: float = Field(default=18_000_000, ge=0)
+
+    @model_validator(mode="after")
+    def migrate_legacy_annual_limit(self) -> "NisaPlan":
+        # Older LifeCanvas files used the accumulation-only 1.2M limit even though the
+        # screen represented the whole NISA account. There was no editable limit field,
+        # so migrate those files to the combined annual allowance automatically.
+        if self.annual_limit == 1_200_000:
+            self.annual_limit = 3_600_000
+        return self
 
     def monthly_for_offset(self, offset: int) -> float:
         value = self.monthly_contribution
