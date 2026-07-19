@@ -19,7 +19,7 @@ def _man(value: float) -> str:
     return f"{value / 10_000:,.0f}万円"
 
 
-def _chart_data_uri(results: list[YearResult]) -> str:
+def _chart_data_uri(results: list[YearResult], separate: bool = False) -> str:
     """Render a fixed-aspect chart that fits safely inside an A4 content area."""
 
     configure_japanese_matplotlib()
@@ -27,7 +27,15 @@ def _chart_data_uri(results: list[YearResult]) -> str:
     axis = figure.add_subplot(111)
     years = [row.calendar_year for row in results]
     axis.plot(years, [row.net_worth / 10_000 for row in results], label="純資産", linewidth=2.2)
-    axis.plot(years, [row.cash_end / 10_000 for row in results], label="現預金", linewidth=1.8)
+    axis.plot(years, [row.cash_end / 10_000 for row in results], label="現預金合計", linewidth=1.8)
+    if separate:
+        axis.plot(
+            years,
+            [row.household_cash_end / 10_000 for row in results],
+            label="共同現預金",
+            linewidth=1.5,
+            linestyle=":",
+        )
     axis.plot(
         years,
         [row.investments_market_value / 10_000 for row in results],
@@ -97,6 +105,21 @@ def _housing_label(plan: ProjectPlan) -> str:
     return labels.get(plan.housing.move_mode, plan.housing.move_mode)
 
 
+def _wallet_rows(plan: ProjectPlan, final: YearResult) -> str:
+    if plan.wallets.mode != "separate":
+        return (
+            "<tr><th>家計方式</th><td>夫婦の収入・現預金を共同家計として合算</td></tr>"
+        )
+    wallet = plan.wallets
+    return f"""
+      <tr><th>家計方式</th><td>共同家計・夫個人・妻個人の3財布</td></tr>
+      <tr><th>共同家計への入金</th><td>夫 月{wallet.husband_household_monthly/10_000:,.1f}万円／妻 月{wallet.wife_household_monthly/10_000:,.1f}万円</td></tr>
+      <tr><th>個人支出</th><td>夫 月{wallet.husband_personal_spending_monthly/10_000:,.1f}万円／妻 月{wallet.wife_personal_spending_monthly/10_000:,.1f}万円</td></tr>
+      <tr><th>最終年の現預金内訳</th><td>共同 {_man(final.household_cash_end)}／夫個人 {_man(final.husband_cash_end)}／妻個人 {_man(final.wife_cash_end)}</td></tr>
+      <tr><th>最終年のNISA内訳</th><td>夫 {_man(final.husband_nisa_market_value)}／妻 {_man(final.wife_nisa_market_value)}</td></tr>
+    """
+
+
 def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -> Path:
     """Create a printable A4 PDF with explicit physical margins and safe chart sizing."""
 
@@ -105,7 +128,14 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     insight = analyze_plan(plan, results)
-    minimum_cash = min(results, key=lambda row: row.cash_end)
+    if plan.wallets.mode == "separate":
+        minimum_cash = min(results, key=lambda row: row.household_cash_end)
+        minimum_cash_value = minimum_cash.household_cash_end
+        minimum_cash_note = f"共同家計・{minimum_cash.calendar_year}年"
+    else:
+        minimum_cash = min(results, key=lambda row: row.cash_end)
+        minimum_cash_value = minimum_cash.cash_end
+        minimum_cash_note = f"{minimum_cash.calendar_year}年"
     retirement = next(
         (row for row in results if row.husband_age == plan.husband.retirement_age),
         results[-1],
@@ -116,7 +146,8 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
     )
     children = "、".join(child.name for child in plan.children) or "なし"
     cars = "、".join(car.name for car in plan.cars if car.enabled) or "なし"
-    chart = _chart_data_uri(results)
+    chart = _chart_data_uri(results, plan.wallets.mode == "separate")
+    final = results[-1]
 
     html = f"""
     <html><head><meta charset='utf-8'><style>
@@ -141,17 +172,18 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
 
     <table class='cards'><tr>
       <td class='card'><div>将来判定</div><div class='value'>{escape(insight.status)}</div><div>{escape(insight.status_note)}</div></td>
-      <td class='card'><div>最低現預金</div><div class='value'>{_man(minimum_cash.cash_end)}</div><div>{minimum_cash.calendar_year}年</div></td>
+      <td class='card'><div>最低現預金</div><div class='value'>{_man(minimum_cash_value)}</div><div>{minimum_cash_note}</div></td>
       <td class='card'><div>夫の定年時純資産</div><div class='value'>{_man(retirement.net_worth)}</div><div>{retirement.calendar_year}年</div></td>
     </tr></table>
 
     <h2>計画の概要</h2>
     <table class='data'>
       <tr><th>家族</th><td>夫 {plan.husband.current_age}歳／妻 {plan.wife.current_age}歳／子ども：{escape(children)}</td></tr>
-      <tr><th>現在の現預金</th><td>{_man(plan.initial_cash)}</td></tr>
+      <tr><th>現在の共同現預金</th><td>{_man(plan.initial_cash)}</td></tr>
       <tr><th>住宅</th><td>{escape(_housing_label(plan))}</td></tr>
       <tr><th>車</th><td>{escape(cars)}</td></tr>
       <tr><th>年金</th><td>夫 {_man(plan.husband.annual_pension)}／妻 {_man(plan.wife.annual_pension)}</td></tr>
+      {_wallet_rows(plan, final)}
     </table>
 
     <div class='pagebreak'></div>
