@@ -66,6 +66,11 @@ class SimulationEngine:
                 event
                 for event in row.events
                 if _RENT_EVENT_PREFIX not in event
+                and not (
+                    row.offset == move_offset
+                    and event.startswith("今の家を")
+                    and "新居へ住み替え" in event
+                )
             ]
             if row.offset == move_offset:
                 row.events.append(
