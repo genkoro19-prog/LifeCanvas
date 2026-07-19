@@ -187,8 +187,8 @@ class SimulationEngine:
                 husband_cash += household_surplus * husband_ratio
                 wife_cash += household_surplus * wife_ratio
 
-            active_children = len(
-                age for age in raw.children_ages.values() if 0 <= age <= 21
+            active_children = sum(
+                1 for age in raw.children_ages.values() if 0 <= age <= 21
             )
             requested_husband = (
                 wallets.husband_household_monthly
