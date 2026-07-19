@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QGroupBox,
@@ -18,17 +18,19 @@ from .models import ChildPlan, ProjectPlan
 
 
 class ChildEditor(QGroupBox):
-    """Edit any number of children and choose the child used for work-stage timing."""
+    """Edit any number of children and keep every result view in sync."""
+
+    changed = Signal()
 
     def __init__(self, plan: ProjectPlan, parent: QWidget | None = None):
         super().__init__("子どもの設定", parent)
         layout = QVBoxLayout(self)
 
         description = QLabel(
-            "子どもは自由に追加・削除できます。妻の育休や復職時期を連動させる基準の子も選べます。"
+            "子どもは自由に追加・削除できます。変更すると教育費・年表・年別結果も更新されます。"
         )
         description.setWordWrap(True)
-        description.setStyleSheet("color:#666;")
+        description.setObjectName("sectionNote")
         layout.addWidget(description)
 
         self.table = QTableWidget(0, 2)
@@ -37,7 +39,7 @@ class ChildEditor(QGroupBox):
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setMinimumHeight(150)
-        self.table.itemChanged.connect(self._refresh_reference_choices)
+        self.table.itemChanged.connect(self._on_table_changed)
         layout.addWidget(self.table)
 
         buttons = QHBoxLayout()
@@ -54,6 +56,7 @@ class ChildEditor(QGroupBox):
         reference_row.addWidget(QLabel("妻の働き方を連動させる子"))
         self.reference_child = QComboBox()
         self.reference_child.setMinimumWidth(180)
+        self.reference_child.currentIndexChanged.connect(self.changed)
         reference_row.addWidget(self.reference_child)
         reference_row.addStretch()
         layout.addLayout(reference_row)
@@ -61,6 +64,7 @@ class ChildEditor(QGroupBox):
         self.load(plan)
 
     def load(self, plan: ProjectPlan) -> None:
+        self.blockSignals(True)
         self.table.blockSignals(True)
         self.table.setRowCount(0)
         for child in plan.children:
@@ -75,6 +79,7 @@ class ChildEditor(QGroupBox):
                 self.reference_child.setCurrentIndex(index)
         elif self.reference_child.count():
             self.reference_child.setCurrentIndex(self.reference_child.count() - 1)
+        self.blockSignals(False)
 
     def _append_row(self, name: str, birth_offset: int) -> None:
         row = self.table.rowCount()
@@ -93,19 +98,29 @@ class ChildEditor(QGroupBox):
                 default_offset = int(self.table.item(self.table.rowCount() - 1, 1).text()) + 1
             except (AttributeError, ValueError):
                 pass
+        self.table.blockSignals(True)
         self._append_row(f"第{number}子", default_offset)
+        self.table.blockSignals(False)
         self._refresh_reference_choices()
+        self.changed.emit()
 
     def remove_selected(self) -> None:
         rows = sorted({index.row() for index in self.table.selectedIndexes()}, reverse=True)
+        if not rows and self.table.currentRow() >= 0:
+            rows = [self.table.currentRow()]
         for row in rows:
             self.table.removeRow(row)
         self._refresh_reference_choices()
+        self.changed.emit()
+
+    def _on_table_changed(self, *_args) -> None:
+        self._refresh_reference_choices()
+        self.changed.emit()
 
     def _refresh_reference_choices(self, *_args) -> None:
-        current = self.reference_child.currentText() if hasattr(self, "reference_child") else ""
         if not hasattr(self, "reference_child"):
             return
+        current = self.reference_child.currentText()
         names: list[str] = []
         for row in range(self.table.rowCount()):
             item = self.table.item(row, 0)
