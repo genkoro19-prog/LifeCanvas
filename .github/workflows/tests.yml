@@ -13,10 +13,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: sudo apt-get update && sudo apt-get install -y xvfb xauth libxkbcommon-x11-0
+      - run: sudo apt-get update && sudo apt-get install -y xvfb xauth libxkbcommon-x11-0 libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
       - run: pytest
       - run: python -m compileall src main.py
       - name: Smoke-test the main window
-        run: xvfb-run -a python -c "from PySide6.QtWidgets import QApplication; from lifecanvas.ui import LifeCanvasWindow; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0; window.close(); app.processEvents(); app.quit()"
+        id: smoke
+        continue-on-error: true
+        run: |
+          set +e
+          xvfb-run -a python -c "from PySide6.QtWidgets import QApplication; from lifecanvas.ui import LifeCanvasWindow; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0; window.close(); app.processEvents(); app.quit()" > smoke.log 2>&1
+          echo $? > smoke.exit
+          cat smoke.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-smoke-log
+          path: |
+            smoke.log
+            smoke.exit
+      - name: Verify UI smoke result
+        run: test "$(cat smoke.exit)" = "0"
