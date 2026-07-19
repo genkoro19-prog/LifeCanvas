@@ -6,13 +6,18 @@ on:
     branches: [main]
 
 jobs:
-  core-tests:
+  test-and-smoke:
     runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
-      - run: pip install pydantic pytest
+      - run: pip install -e ".[dev]"
       - run: pytest
+      - run: python -m compileall src main.py
+      - name: Smoke-test the main window
+        run: python -c "from PySide6.QtWidgets import QApplication; from lifecanvas.ui import LifeCanvasWindow; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0"
