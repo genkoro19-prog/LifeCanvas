@@ -23,6 +23,32 @@ class PersonPlan(BaseModel):
     social_insurance_mode: SocialInsuranceMode = SocialInsuranceMode.EMPLOYEE
 
 
+class IncomePeriod(BaseModel):
+    owner: Literal["husband", "wife"]
+    label: str
+    start_age: int = Field(ge=0, le=100)
+    end_age: int | None = Field(default=None, ge=0, le=101)
+    annual_gross_income: float = Field(default=0, ge=0)
+    annual_benefit: float = Field(default=0, ge=0)
+    social_insurance_mode: SocialInsuranceMode = SocialInsuranceMode.EMPLOYEE
+
+    def active(self, age: int) -> bool:
+        return age >= self.start_age and (self.end_age is None or age < self.end_age)
+
+    @model_validator(mode="after")
+    def validate_age_range(self) -> "IncomePeriod":
+        if self.end_age is not None and self.end_age <= self.start_age:
+            raise ValueError("収入期間の終了年齢は開始年齢より後にしてください")
+        return self
+
+
+class OneTimeIncome(BaseModel):
+    owner: Literal["husband", "wife", "household"] = "household"
+    label: str
+    age: int = Field(ge=0, le=100)
+    amount: float = Field(default=0, ge=0)
+
+
 class WifeWorkStage(BaseModel):
     key: str
     label: str
@@ -139,6 +165,8 @@ class ProjectPlan(BaseModel):
     initial_cash: float = Field(default=1_200_000, ge=0)
     husband: PersonPlan
     wife: PersonPlan
+    income_periods: list[IncomePeriod] = Field(default_factory=list)
+    one_time_incomes: list[OneTimeIncome] = Field(default_factory=list)
     wife_work_stages: list[WifeWorkStage]
     children: list[ChildPlan]
     education: EducationCostPlan
@@ -165,6 +193,8 @@ class YearResult(BaseModel):
     husband_gross: float
     wife_gross: float
     salary_net: float
+    pension_income: float = 0
+    one_time_income: float = 0
     benefits: float
     rental_income: float
     total_income: float
