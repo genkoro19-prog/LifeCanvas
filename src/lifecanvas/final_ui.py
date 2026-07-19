@@ -2,18 +2,70 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from PySide6.QtWidgets import QTableWidgetItem, QWidget
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QHeaderView,
+    QLabel,
+    QListWidget,
+    QTableWidgetItem,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
+from .cashflow_event_editor import CashFlowEventEditor
 from .child_editor import ChildEditor
 from .complete_ui import LifeCanvasWindow as CompleteLifeCanvasWindow
 from .engine import SimulationEngine
 from .family import apply_work_stages_for_child, infer_work_reference_child
+from .insights import analyze_plan, dominant_expense
 from .models import IncomePeriod
-from .ui import man
+from .plotting import configure_japanese_matplotlib
+from .ui import MetricCard, man
 
 
 class LifeCanvasWindow(CompleteLifeCanvasWindow):
-    """Desktop UI with flexible family settings and opinionated default retirement plan."""
+    """Desktop UI with flexible family, free events, and local plan analysis."""
+
+    def _build_dashboard(self) -> QWidget:
+        configure_japanese_matplotlib()
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        cards = QGridLayout()
+        self.card_retirement = MetricCard("夫60歳時点の純資産")
+        self.card_cash = MetricCard("最低現預金")
+        self.card_shortage = MetricCard("資金ショート")
+        self.card_move = MetricCard("住み替え時のローン残高")
+        self.card_outlook = MetricCard("将来判定")
+        self.card_final = MetricCard("最終年の純資産")
+        card_items = [
+            self.card_retirement,
+            self.card_cash,
+            self.card_shortage,
+            self.card_move,
+            self.card_outlook,
+            self.card_final,
+        ]
+        for index, card in enumerate(card_items):
+            cards.addWidget(card, index // 3, index % 3)
+        layout.addLayout(cards)
+
+        self.figure = Figure(figsize=(10, 4.4))
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        layout.addWidget(self.canvas, 1)
+
+        self.dashboard_summary = QTextEdit()
+        self.dashboard_summary.setReadOnly(True)
+        self.dashboard_summary.setMaximumHeight(145)
+        layout.addWidget(self.dashboard_summary)
+
+        self.dashboard_warnings = QListWidget()
+        self.dashboard_warnings.setMaximumHeight(110)
+        layout.addWidget(self.dashboard_warnings)
+        return page
 
     def _build_setup(self) -> QWidget:
         scroll = super()._build_setup()
@@ -32,8 +84,34 @@ class LifeCanvasWindow(CompleteLifeCanvasWindow):
         self.child_editor = ChildEditor(self.plan)
         insert_at = layout.indexOf(self.husband_income_editor)
         layout.insertWidget(max(0, insert_at), self.child_editor)
+        self.cashflow_event_editor = CashFlowEventEditor(self.plan)
+        layout.insertWidget(max(0, insert_at + 1), self.cashflow_event_editor)
         self._update_work_labels()
         return scroll
+
+    def _configure_annual_table(self) -> None:
+        headers = [
+            "年",
+            "夫/妻",
+            "夫年収",
+            "妻年収",
+            "年金",
+            "退職金等",
+            "イベント収入",
+            "収入合計",
+            "生活費",
+            "住宅",
+            "教育",
+            "車",
+            "イベント支出",
+            "生活収支",
+            "現預金",
+            "投資",
+            "純資産",
+        ]
+        self.year_table.setColumnCount(len(headers))
+        self.year_table.setHorizontalHeaderLabels(headers)
+        self.year_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
 
     def _update_work_labels(self) -> None:
         work_form = self.w_nursery.parentWidget().layout()
@@ -66,6 +144,7 @@ class LifeCanvasWindow(CompleteLifeCanvasWindow):
         self.plan.children = self.child_editor.children()
         reference_child = self.child_editor.reference_child_name()
         apply_work_stages_for_child(self.plan, reference_child)
+        self.plan.cashflow_events = self.cashflow_event_editor.events()
 
         self.plan.car.purchase_offset = self.car_purchase_offset.int_value()
         cycle = self.car_cycle.int_value()
@@ -134,6 +213,7 @@ class LifeCanvasWindow(CompleteLifeCanvasWindow):
         self.initial_cash.set_value(self.plan.initial_cash)
         self.living_monthly.set_value(self.plan.living_cost.monthly_amount)
         self.child_editor.load(self.plan)
+        self.cashflow_event_editor.load(self.plan)
         inferred = infer_work_reference_child(self.plan)
         if inferred:
             index = self.child_editor.reference_child.findText(inferred)
@@ -182,6 +262,146 @@ class LifeCanvasWindow(CompleteLifeCanvasWindow):
         self.h_nisa_after.set_value(self.plan.nisa_accounts[0].contribution_changes.get(5, 0))
         self.w_nisa.set_value(self.plan.nisa_accounts[1].monthly_contribution)
         self._update_work_labels()
+
+    def _refresh_dashboard(self) -> None:
+        configure_japanese_matplotlib()
+        retirement = next(
+            (row for row in self.results if row.husband_age == self.plan.husband.retirement_age),
+            self.results[-1],
+        )
+        minimum_cash = min(self.results, key=lambda row: row.cash_end)
+        shortage = [
+            row
+            for row in self.results
+            if any("資金ショート" in warning for warning in row.warnings)
+        ]
+        insight = analyze_plan(self.plan, self.results)
+
+        self.card_retirement.value.setText(man(retirement.net_worth))
+        self.card_retirement.note.setText(f"{retirement.calendar_year}年")
+        self.card_cash.value.setText(man(minimum_cash.cash_end))
+        self.card_cash.note.setText(f"最低年: {minimum_cash.calendar_year}年")
+        self.card_shortage.value.setText("あり" if shortage else "なし")
+        self.card_shortage.note.setText(
+            f"{shortage[0].calendar_year}年から" if shortage else "現在の前提では発生しません"
+        )
+        if self.plan.housing.move_offset is None:
+            self.card_move.value.setText("なし")
+            self.card_move.note.setText("住み替えを設定していません")
+        else:
+            move = self.results[min(self.plan.housing.move_offset, len(self.results) - 1)]
+            self.card_move.value.setText(man(move.mortgage_balance))
+            self.card_move.note.setText(f"住み替え年: {move.calendar_year}年")
+        self.card_outlook.value.setText(insight.status)
+        self.card_outlook.note.setText(insight.status_note)
+        self.card_final.value.setText(man(insight.final_net_worth))
+        self.card_final.note.setText(f"{self.results[-1].calendar_year}年")
+
+        self.figure.clear()
+        axis = self.figure.add_subplot(111)
+        years = [row.calendar_year for row in self.results]
+        axis.plot(years, [row.net_worth / 10_000 for row in self.results], label="純資産")
+        axis.plot(years, [row.cash_end / 10_000 for row in self.results], label="現預金")
+        axis.plot(
+            years,
+            [row.investments_market_value / 10_000 for row in self.results],
+            label="投資資産",
+        )
+        axis.plot(
+            years,
+            [-row.mortgage_balance / 10_000 for row in self.results],
+            label="住宅ローン（負債）",
+            linestyle="--",
+        )
+        axis.axhline(0, linewidth=1, alpha=0.45)
+        axis.set_title("資産・負債の推移")
+        axis.set_xlabel("年")
+        axis.set_ylabel("万円")
+        axis.grid(True, alpha=0.25)
+        axis.legend(ncol=4, loc="best")
+        self.figure.tight_layout()
+        self.canvas.draw()
+
+        difficult_lines = []
+        for row in insight.difficult_years:
+            difficult_lines.append(
+                f"・{row.calendar_year}年　収支 {man(row.living_surplus)}　主な支出: {dominant_expense(row)}"
+            )
+        summary = [
+            f"判定: {insight.status} — {insight.status_note}",
+            f"老後期間の最低現預金: {man(insight.retirement_min_cash)}",
+            "",
+            "収支が厳しい年:",
+            *difficult_lines,
+        ]
+        self.dashboard_summary.setPlainText("\n".join(summary))
+
+        self.dashboard_warnings.clear()
+        for result in self.results:
+            for warning in result.warnings:
+                self.dashboard_warnings.addItem(f"{result.calendar_year}年: {warning}")
+        if self.dashboard_warnings.count() == 0:
+            self.dashboard_warnings.addItem("重大な資金ショートはありません。")
+
+    def _refresh_table(self) -> None:
+        self.year_table.setRowCount(len(self.results))
+        for row, result in enumerate(self.results):
+            values = [
+                str(result.calendar_year),
+                f"{result.husband_age}/{result.wife_age}",
+                man(result.husband_gross),
+                man(result.wife_gross),
+                man(result.pension_income),
+                man(result.one_time_income),
+                man(result.life_event_income),
+                man(result.total_income),
+                man(result.core_living_cost),
+                man(result.housing_cost),
+                man(result.education_cost),
+                man(result.car_cost),
+                man(result.life_event_expense),
+                man(result.living_surplus),
+                man(result.cash_end),
+                man(result.investments_market_value),
+                man(result.net_worth),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column >= 2:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.year_table.setItem(row, column, item)
+        self.year_table.selectRow(0)
+
+    def _set_year_detail(self, widget: QTextEdit, offset: int, events: list) -> None:
+        result = self.results[offset]
+        children = "、".join(
+            f"{name}{age}歳" for name, age in result.children_ages.items()
+        ) or "なし"
+        event_lines = [
+            f"・{event.title}: {event.detail}" for event in events
+        ] or [f"・{event}" for event in result.events] or ["・なし"]
+        lines = [
+            f"{result.calendar_year}年（夫{result.husband_age}歳・妻{result.wife_age}歳）",
+            f"子ども: {children}",
+            "",
+            "イベント:",
+            *event_lines,
+            "",
+            f"夫年収 {man(result.husband_gross)} / 妻年収 {man(result.wife_gross)}",
+            f"給与手取り {man(result.salary_net)} / 年金 {man(result.pension_income)}",
+            f"退職金等 {man(result.one_time_income)} / イベント収入 {man(result.life_event_income)}",
+            f"給付 {man(result.benefits)} / 家賃 {man(result.rental_income)}",
+            f"収入合計 {man(result.total_income)}",
+            "",
+            f"生活費 {man(result.core_living_cost)} / 住宅 {man(result.housing_cost)}",
+            f"教育 {man(result.education_cost)} / 車 {man(result.car_cost)}",
+            f"イベント支出 {man(result.life_event_expense)}",
+            f"生活収支 {man(result.living_surplus)}",
+            f"現預金 {man(result.cash_end)} / 純資産 {man(result.net_worth)}",
+        ]
+        if result.warnings:
+            lines.extend(["", "注意:", *[f"・{warning}" for warning in result.warnings]])
+        widget.setPlainText("\n".join(lines))
 
     def _refresh_compare(self) -> None:
         scenarios = []
