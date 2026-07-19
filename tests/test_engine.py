@@ -15,13 +15,19 @@ def test_first_year_is_september_to_december():
     assert first.wife_gross == pytest.approx(3_500_000 * 4 / 12)
 
 
-def test_husband_retires_at_60():
-    row = next(r for r in results() if r.husband_age == 60)
-    assert row.husband_gross == 0
-    assert any("定年" in event for event in row.events)
+def test_husband_works_for_220_man_until_pension():
+    rows = results()
+    age_60 = next(row for row in rows if row.husband_age == 60)
+    age_64 = next(row for row in rows if row.husband_age == 64)
+    age_65 = next(row for row in rows if row.husband_age == 65)
+    assert age_60.husband_gross == pytest.approx(2_200_000)
+    assert age_64.husband_gross == pytest.approx(2_200_000)
+    assert age_65.husband_gross == 0
+    assert age_65.pension_income >= 1_800_000
+    assert any("定年" in event for event in age_60.events)
 
 
-def test_wife_income_follows_second_child_stages():
+def test_wife_income_follows_reference_child_stages():
     rows = results()
     assert rows[10].wife_gross == pytest.approx(576_000)
     assert rows[12].wife_gross == pytest.approx(960_000)

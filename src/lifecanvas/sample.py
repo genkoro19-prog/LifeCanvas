@@ -57,7 +57,7 @@ def build_genki_family_plan() -> ProjectPlan:
                 label="定年後の継続雇用",
                 start_age=60,
                 end_age=65,
-                annual_gross_income=0,
+                annual_gross_income=2_200_000,
                 social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
             ),
         ],
@@ -76,7 +76,7 @@ def build_genki_family_plan() -> ProjectPlan:
             ),
             WifeWorkStage(
                 key="childcare_leave",
-                label="連続育児休業",
+                label="育児休業",
                 start_offset=5,
                 end_offset=10,
                 annual_gross_income=0,
@@ -85,7 +85,7 @@ def build_genki_family_plan() -> ProjectPlan:
             ),
             WifeWorkStage(
                 key="nursery",
-                label="短時間パート（第二子保育園）",
+                label="短時間パート（基準の子・保育園期）",
                 start_offset=10,
                 end_offset=12,
                 annual_gross_income=576_000,
@@ -93,7 +93,7 @@ def build_genki_family_plan() -> ProjectPlan:
             ),
             WifeWorkStage(
                 key="elementary",
-                label="パート（第二子小学生）",
+                label="パート（基準の子・小学生期）",
                 start_offset=12,
                 end_offset=18,
                 annual_gross_income=960_000,
@@ -101,7 +101,7 @@ def build_genki_family_plan() -> ProjectPlan:
             ),
             WifeWorkStage(
                 key="junior_high",
-                label="週4〜5日パート（第二子中学生以降）",
+                label="週4〜5日パート（基準の子・中学生以降）",
                 start_offset=18,
                 end_offset=27,
                 annual_gross_income=2_200_000,
