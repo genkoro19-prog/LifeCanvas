@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+from .models import (
+    CarPlan,
+    ChildPlan,
+    EducationCostPlan,
+    HousingPlan,
+    IncomePeriod,
+    LivingCostPlan,
+    MortgagePlan,
+    NisaPlan,
+    OneTimeIncome,
+    PersonPlan,
+    ProjectPlan,
+    SocialInsuranceMode,
+    SystemRules,
+    WifeWorkStage,
+)
+
+
+def build_ito_family_plan() -> ProjectPlan:
+    """Create a cautious baseline from the information provided for the Ito family.
+
+    Unsettled choices are intentionally conservative: one child in five years and no
+    NISA contributions until the household decides on an investment amount.
+    """
+
+    return ProjectPlan(
+        name="伊藤家ライフプラン（仮設定）",
+        start_year=2026,
+        start_month=7,
+        simulation_years=50,
+        initial_cash=1_500_000,
+        husband=PersonPlan(
+            name="夫",
+            current_age=34,
+            annual_gross_income=6_000_000,
+            retirement_age=60,
+            pension_start_age=65,
+            annual_pension=1_800_000,
+            social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+        ),
+        wife=PersonPlan(
+            name="妻",
+            current_age=29,
+            annual_gross_income=4_500_000,
+            retirement_age=60,
+            pension_start_age=65,
+            annual_pension=1_500_000,
+            social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+        ),
+        income_periods=[
+            IncomePeriod(
+                owner="husband",
+                label="現在の勤務",
+                start_age=34,
+                end_age=60,
+                annual_gross_income=6_000_000,
+                social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+            ),
+            IncomePeriod(
+                owner="husband",
+                label="定年後の継続雇用",
+                start_age=60,
+                end_age=65,
+                annual_gross_income=2_400_000,
+                social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+            ),
+        ],
+        one_time_incomes=[
+            OneTimeIncome(owner="husband", label="夫の退職金", age=60, amount=0),
+            OneTimeIncome(owner="wife", label="妻の退職金", age=60, amount=0),
+        ],
+        wife_work_stages=[
+            WifeWorkStage(
+                key="full_time",
+                label="出産前の正社員",
+                start_offset=0,
+                end_offset=5,
+                annual_gross_income=4_500_000,
+                social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+            ),
+            WifeWorkStage(
+                key="childcare_leave",
+                label="育児休業",
+                start_offset=5,
+                end_offset=9,
+                annual_gross_income=0,
+                annual_benefit=2_800_000,
+                social_insurance_mode=SocialInsuranceMode.NONE,
+            ),
+            WifeWorkStage(
+                key="nursery",
+                label="時短勤務（第一子・保育園期）",
+                start_offset=9,
+                end_offset=11,
+                annual_gross_income=3_500_000,
+                social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+            ),
+            WifeWorkStage(
+                key="elementary",
+                label="時短勤務（第一子・小学生期）",
+                start_offset=11,
+                end_offset=17,
+                annual_gross_income=4_000_000,
+                social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+            ),
+            WifeWorkStage(
+                key="junior_high",
+                label="正社員復帰（第一子・中学生以降）",
+                start_offset=17,
+                end_offset=31,
+                annual_gross_income=4_500_000,
+                social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+            ),
+            WifeWorkStage(
+                key="retired",
+                label="退職",
+                start_offset=31,
+                annual_gross_income=0,
+                social_insurance_mode=SocialInsuranceMode.NONE,
+            ),
+        ],
+        children=[ChildPlan(name="第一子（仮）", birth_offset=5)],
+        education=EducationCostPlan(),
+        housing=HousingPlan(
+            purchase_price=60_000_000,
+            mortgage=MortgagePlan(
+                principal=60_000_000,
+                term_years=40,
+                initial_rate_percent=1.25,
+                annual_rate_step_percent=0.10,
+                max_rate_percent=3.0,
+                property_tax_annual=180_000,
+                insurance_annual=30_000,
+                maintenance_annual=120_000,
+            ),
+            move_mode="none",
+            move_offset=None,
+            move_cost=700_000,
+            new_home_monthly_cost=150_000,
+            old_home_net_rent_annual=0,
+        ),
+        car=CarPlan(
+            name="普通乗用車",
+            purchase_offset=1,
+            purchase_price=3_500_000,
+            annual_running_cost=400_000,
+            replacement_cycle_years=8,
+            replacement_price=3_500_000,
+        ),
+        cars=[
+            CarPlan(
+                name="普通乗用車",
+                purchase_offset=1,
+                purchase_price=3_500_000,
+                annual_running_cost=400_000,
+                replacement_cycle_years=8,
+                replacement_price=3_500_000,
+            )
+        ],
+        nisa_accounts=[
+            NisaPlan(
+                owner="husband",
+                monthly_contribution=0,
+                contribution_changes={5: 0},
+                annual_return_percent=4.0,
+            ),
+            NisaPlan(
+                owner="wife",
+                monthly_contribution=0,
+                annual_return_percent=4.0,
+            ),
+        ],
+        living_cost=LivingCostPlan(
+            monthly_amount=250_000,
+            scope="excludes_housing",
+            annual_child_increment=0,
+        ),
+        rules=SystemRules(minimum_cash_reserve=1_500_000),
+    )
