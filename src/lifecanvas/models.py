@@ -157,7 +157,8 @@ class NisaPlan(BaseModel):
     monthly_contribution: float = Field(ge=0)
     contribution_changes: dict[int, float] = Field(default_factory=dict)
     annual_return_percent: float = Field(default=4.0, ge=-100, le=100)
-    annual_limit: float = Field(default=1_200_000, ge=0)
+    # Simplified combined NISA model: accumulation and growth investment allowances together.
+    annual_limit: float = Field(default=3_600_000, ge=0)
     lifetime_limit: float = Field(default=18_000_000, ge=0)
 
     def monthly_for_offset(self, offset: int) -> float:
