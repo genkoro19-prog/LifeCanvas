@@ -6,8 +6,8 @@ from io import BytesIO
 from pathlib import Path
 
 from matplotlib.figure import Figure
-from PySide6.QtCore import QSizeF
-from PySide6.QtGui import QPageSize, QPdfWriter, QTextDocument
+from PySide6.QtCore import QMarginsF, QSizeF
+from PySide6.QtGui import QPageLayout, QPageSize, QPdfWriter, QTextDocument
 
 from .insights import analyze_plan, dominant_expense
 from .models import ProjectPlan, YearResult
@@ -20,8 +20,10 @@ def _man(value: float) -> str:
 
 
 def _chart_data_uri(results: list[YearResult]) -> str:
+    """Render a fixed-aspect chart that fits safely inside an A4 content area."""
+
     configure_japanese_matplotlib()
-    figure = Figure(figsize=(9.3, 4.2), dpi=120)
+    figure = Figure(figsize=(7.0, 3.6), dpi=150)
     axis = figure.add_subplot(111)
     years = [row.calendar_year for row in results]
     axis.plot(years, [row.net_worth / 10_000 for row in results], label="純資産", linewidth=2.2)
@@ -44,10 +46,12 @@ def _chart_data_uri(results: list[YearResult]) -> str:
     axis.set_xlabel("年")
     axis.set_ylabel("万円")
     axis.grid(True, alpha=0.22)
-    axis.legend(ncol=2, loc="upper left", frameon=False)
-    figure.subplots_adjust(left=0.08, right=0.98, bottom=0.14, top=0.88)
+    axis.legend(ncol=2, loc="upper left", frameon=False, fontsize=8.5)
+    axis.margins(x=0.01)
+    figure.subplots_adjust(left=0.105, right=0.975, bottom=0.18, top=0.86)
+
     buffer = BytesIO()
-    figure.savefig(buffer, format="png", bbox_inches="tight")
+    figure.savefig(buffer, format="png", facecolor="white")
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
@@ -94,7 +98,7 @@ def _housing_label(plan: ProjectPlan) -> str:
 
 
 def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -> Path:
-    """Create a compact, printable PDF without external services or APIs."""
+    """Create a printable A4 PDF with explicit physical margins and safe chart sizing."""
 
     if not results:
         raise ValueError("PDFを作成する前に計算を実行してください。")
@@ -116,20 +120,20 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
 
     html = f"""
     <html><head><meta charset='utf-8'><style>
-    @page {{ size: A4; margin: 16mm; }}
-    body {{ font-family: 'Yu Gothic', 'Meiryo', 'Noto Sans CJK JP', sans-serif; color:#172033; font-size:10pt; }}
-    h1 {{ color:#183153; font-size:24pt; margin-bottom:2px; }}
-    h2 {{ color:#24476f; border-bottom:2px solid #dbe7f4; padding-bottom:5px; margin-top:20px; }}
+    body {{ font-family: 'Yu Gothic', 'Meiryo', 'Noto Sans CJK JP', sans-serif; color:#172033; font-size:9.5pt; margin:0; }}
+    h1 {{ color:#183153; font-size:23pt; margin:0 0 3px 0; }}
+    h2 {{ color:#24476f; border-bottom:2px solid #dbe7f4; padding-bottom:5px; margin:18px 0 9px 0; }}
     .muted {{ color:#6b778c; }}
-    .cards {{ width:100%; border-collapse:separate; border-spacing:7px; }}
-    .card {{ background:#f3f7fc; border:1px solid #dce6f2; padding:10px; vertical-align:top; }}
-    .value {{ font-size:16pt; font-weight:bold; color:#163a67; }}
-    table.data {{ width:100%; border-collapse:collapse; font-size:8.5pt; }}
+    .cards {{ width:100%; border-collapse:separate; border-spacing:6px; }}
+    .card {{ background:#f3f7fc; border:1px solid #dce6f2; padding:9px; vertical-align:top; }}
+    .value {{ font-size:15pt; font-weight:bold; color:#163a67; }}
+    table.data {{ width:100%; border-collapse:collapse; font-size:8.2pt; }}
     table.data th {{ background:#eaf1f8; color:#344b68; padding:5px; border:1px solid #d8e1ec; }}
     table.data td {{ padding:4px; border:1px solid #e1e7ef; }}
     .pagebreak {{ page-break-before: always; }}
-    .chart {{ width:100%; }}
-    .judge {{ background:#eef8f4; border-left:5px solid #2f8b70; padding:12px; }}
+    .chart-section {{ page-break-inside: avoid; }}
+    .chart {{ display:block; width:96%; max-width:168mm; height:auto; margin:0 auto; }}
+    .judge {{ background:#eef8f4; border-left:5px solid #2f8b70; padding:11px; }}
     </style></head><body>
     <h1>LifeCanvas</h1>
     <div class='muted'>{escape(plan.name)}　将来設計レポート</div>
@@ -150,8 +154,11 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
       <tr><th>年金</th><td>夫 {_man(plan.husband.annual_pension)}／妻 {_man(plan.wife.annual_pension)}</td></tr>
     </table>
 
-    <h2>資産推移</h2>
-    <img class='chart' src='{chart}' />
+    <div class='pagebreak'></div>
+    <div class='chart-section'>
+      <h2>資産推移</h2>
+      <img class='chart' src='{chart}' />
+    </div>
 
     <h2>確認しておきたい年</h2>
     <div class='judge'><ul>{difficult or '<li>大きな資金悪化は見つかりませんでした。</li>'}</ul></div>
@@ -170,10 +177,18 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
     """
 
     writer = QPdfWriter(str(target))
-    writer.setPageSize(QPageSize(QPageSize.A4))
-    writer.setResolution(120)
+    writer.setResolution(144)
+    page_layout = QPageLayout(
+        QPageSize(QPageSize.A4),
+        QPageLayout.Portrait,
+        QMarginsF(18, 18, 18, 18),
+        QPageLayout.Millimeter,
+    )
+    writer.setPageLayout(page_layout)
     writer.setTitle(f"LifeCanvas - {plan.name}")
+
     document = QTextDocument()
+    document.setDocumentMargin(0)
     document.setPageSize(QSizeF(writer.width(), writer.height()))
     document.setHtml(html)
     document.print_(writer)
