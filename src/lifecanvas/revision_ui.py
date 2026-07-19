@@ -20,15 +20,17 @@ from . import complete_ui as complete_ui_module
 from . import final_ui as final_ui_module
 from .housing_editor_v2 import HousingEditor
 from .ito_sample import build_ito_family_plan
+from .pdf_report_v2 import export_pdf
 from .plotting import configure_japanese_matplotlib
 from .rent_engine import SimulationEngine, is_rental_move
 from .sample import build_genki_family_plan
 from .ui import MetricCard
 
-# Keep all inherited calculation paths on the rent-aware engine and the new editor.
+# Keep all inherited calculation and export paths on the revised implementations.
 complete_ui_module.SimulationEngine = SimulationEngine
 final_ui_module.SimulationEngine = SimulationEngine
 final_ui_module.HousingEditor = HousingEditor
+final_ui_module.export_pdf = export_pdf
 
 from .final_ui import LifeCanvasWindow as BaseLifeCanvasWindow
 
