@@ -31,9 +31,16 @@ def _chart_data_uri(results: list[YearResult], separate: bool = False) -> str:
     if separate:
         axis.plot(
             years,
-            [row.household_cash_end / 10_000 for row in results],
-            label="共同現預金",
-            linewidth=1.5,
+            [row.husband_cash_end / 10_000 for row in results],
+            label="夫預金",
+            linewidth=1.4,
+            linestyle=":",
+        )
+        axis.plot(
+            years,
+            [row.wife_cash_end / 10_000 for row in results],
+            label="妻預金",
+            linewidth=1.4,
             linestyle=":",
         )
     axis.plot(
@@ -54,7 +61,7 @@ def _chart_data_uri(results: list[YearResult], separate: bool = False) -> str:
     axis.set_xlabel("年")
     axis.set_ylabel("万円")
     axis.grid(True, alpha=0.22)
-    axis.legend(ncol=2, loc="upper left", frameon=False, fontsize=8.5)
+    axis.legend(ncol=2, loc="upper left", frameon=False, fontsize=8.2)
     axis.margins(x=0.01)
     figure.subplots_adjust(left=0.105, right=0.975, bottom=0.18, top=0.86)
 
@@ -76,20 +83,35 @@ def _event_rows(results: list[YearResult]) -> str:
     return "".join(rows[:28])
 
 
-def _annual_rows(results: list[YearResult]) -> str:
+def _annual_rows(results: list[YearResult], separate: bool) -> str:
     rows: list[str] = []
     for result in results:
-        rows.append(
-            "<tr>"
-            f"<td>{result.calendar_year}</td>"
-            f"<td>{_man(result.total_income)}</td>"
-            f"<td>{_man(result.consumption_total)}</td>"
-            f"<td>{_man(result.living_surplus)}</td>"
-            f"<td>{_man(result.cash_end)}</td>"
-            f"<td>{_man(result.investments_market_value)}</td>"
-            f"<td>{_man(result.net_worth)}</td>"
-            "</tr>"
-        )
+        if separate:
+            rows.append(
+                "<tr>"
+                f"<td>{result.calendar_year}</td>"
+                f"<td>{_man(result.household_cost_net)}</td>"
+                f"<td>{_man(result.husband_household_paid)}</td>"
+                f"<td>{_man(result.wife_household_paid)}</td>"
+                f"<td>{_man(result.household_shortfall)}</td>"
+                f"<td>{_man(result.husband_cash_end)}</td>"
+                f"<td>{_man(result.wife_cash_end)}</td>"
+                f"<td>{_man(result.investments_market_value)}</td>"
+                f"<td>{_man(result.net_worth)}</td>"
+                "</tr>"
+            )
+        else:
+            rows.append(
+                "<tr>"
+                f"<td>{result.calendar_year}</td>"
+                f"<td>{_man(result.total_income)}</td>"
+                f"<td>{_man(result.consumption_total)}</td>"
+                f"<td>{_man(result.living_surplus)}</td>"
+                f"<td>{_man(result.cash_end)}</td>"
+                f"<td>{_man(result.investments_market_value)}</td>"
+                f"<td>{_man(result.net_worth)}</td>"
+                "</tr>"
+            )
     return "".join(rows)
 
 
@@ -112,11 +134,15 @@ def _wallet_rows(plan: ProjectPlan, final: YearResult) -> str:
         )
     wallet = plan.wallets
     return f"""
-      <tr><th>家計方式</th><td>共同家計・夫個人・妻個人の3財布</td></tr>
-      <tr><th>共同家計への入金</th><td>夫 月{wallet.husband_household_monthly/10_000:,.1f}万円／妻 月{wallet.wife_household_monthly/10_000:,.1f}万円</td></tr>
+      <tr><th>家計方式</th><td>共同預金なし。夫預金と妻預金を別々に管理</td></tr>
+      <tr><th>通常の家計負担上限</th><td>夫 月{wallet.husband_household_monthly/10_000:,.1f}万円／妻 月{wallet.wife_household_monthly/10_000:,.1f}万円</td></tr>
+      <tr><th>子ども1人あたり追加</th><td>夫 月{wallet.husband_child_household_increment_monthly/10_000:,.1f}万円／妻 月{wallet.wife_child_household_increment_monthly/10_000:,.1f}万円</td></tr>
+      <tr><th>家計不足の補填割合</th><td>夫 {wallet.household_shortfall_husband_percent:g}%／妻 {wallet.household_shortfall_wife_percent:g}%</td></tr>
       <tr><th>個人支出</th><td>夫 月{wallet.husband_personal_spending_monthly/10_000:,.1f}万円／妻 月{wallet.wife_personal_spending_monthly/10_000:,.1f}万円</td></tr>
-      <tr><th>最終年の現預金内訳</th><td>共同 {_man(final.household_cash_end)}／夫個人 {_man(final.husband_cash_end)}／妻個人 {_man(final.wife_cash_end)}</td></tr>
-      <tr><th>最終年のNISA内訳</th><td>夫 {_man(final.husband_nisa_market_value)}／妻 {_man(final.wife_nisa_market_value)}</td></tr>
+      <tr><th>最低手元現金</th><td>夫婦それぞれ {_man(wallet.minimum_personal_cash)}。下回る前に本人NISAを減額・停止</td></tr>
+      <tr><th>給付金</th><td>全額を妻口座へ入金</td></tr>
+      <tr><th>最終年の預金</th><td>夫 {_man(final.husband_cash_end)}／妻 {_man(final.wife_cash_end)}</td></tr>
+      <tr><th>最終年のNISA</th><td>夫 {_man(final.husband_nisa_market_value)}／妻 {_man(final.wife_nisa_market_value)}</td></tr>
     """
 
 
@@ -128,10 +154,15 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     insight = analyze_plan(plan, results)
-    if plan.wallets.mode == "separate":
-        minimum_cash = min(results, key=lambda row: row.household_cash_end)
-        minimum_cash_value = minimum_cash.household_cash_end
-        minimum_cash_note = f"共同家計・{minimum_cash.calendar_year}年"
+    separate = plan.wallets.mode == "separate"
+    if separate:
+        cash_points = [
+            (row.husband_cash_end, "夫", row.calendar_year) for row in results
+        ] + [
+            (row.wife_cash_end, "妻", row.calendar_year) for row in results
+        ]
+        minimum_cash_value, owner, minimum_year = min(cash_points, key=lambda item: item[0])
+        minimum_cash_note = f"{owner}・{minimum_year}年"
     else:
         minimum_cash = min(results, key=lambda row: row.cash_end)
         minimum_cash_value = minimum_cash.cash_end
@@ -146,8 +177,19 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
     )
     children = "、".join(child.name for child in plan.children) or "なし"
     cars = "、".join(car.name for car in plan.cars if car.enabled) or "なし"
-    chart = _chart_data_uri(results, plan.wallets.mode == "separate")
+    chart = _chart_data_uri(results, separate)
     final = results[-1]
+    current_cash = (
+        f"夫 {_man(plan.wallets.initial_husband_cash)}／妻 {_man(plan.wallets.initial_wife_cash)}"
+        if separate
+        else _man(plan.initial_cash)
+    )
+    annual_header = (
+        "<tr><th>年</th><th>家計費</th><th>夫負担</th><th>妻負担</th>"
+        "<th>家計不足</th><th>夫預金</th><th>妻預金</th><th>投資</th><th>純資産</th></tr>"
+        if separate
+        else "<tr><th>年</th><th>収入</th><th>支出</th><th>収支</th><th>現預金</th><th>投資</th><th>純資産</th></tr>"
+    )
 
     html = f"""
     <html><head><meta charset='utf-8'><style>
@@ -172,14 +214,14 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
 
     <table class='cards'><tr>
       <td class='card'><div>将来判定</div><div class='value'>{escape(insight.status)}</div><div>{escape(insight.status_note)}</div></td>
-      <td class='card'><div>最低現預金</div><div class='value'>{_man(minimum_cash_value)}</div><div>{minimum_cash_note}</div></td>
+      <td class='card'><div>最低手元現金</div><div class='value'>{_man(minimum_cash_value)}</div><div>{minimum_cash_note}</div></td>
       <td class='card'><div>夫の定年時純資産</div><div class='value'>{_man(retirement.net_worth)}</div><div>{retirement.calendar_year}年</div></td>
     </tr></table>
 
     <h2>計画の概要</h2>
     <table class='data'>
       <tr><th>家族</th><td>夫 {plan.husband.current_age}歳／妻 {plan.wife.current_age}歳／子ども：{escape(children)}</td></tr>
-      <tr><th>現在の共同現預金</th><td>{_man(plan.initial_cash)}</td></tr>
+      <tr><th>現在の現預金</th><td>{current_cash}</td></tr>
       <tr><th>住宅</th><td>{escape(_housing_label(plan))}</td></tr>
       <tr><th>車</th><td>{escape(cars)}</td></tr>
       <tr><th>年金</th><td>夫 {_man(plan.husband.annual_pension)}／妻 {_man(plan.wife.annual_pension)}</td></tr>
@@ -202,8 +244,8 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
 
     <div class='pagebreak'></div>
     <h2>年次キャッシュフロー</h2>
-    <table class='data'><tr><th>年</th><th>収入</th><th>支出</th><th>収支</th><th>現預金</th><th>投資</th><th>純資産</th></tr>
-    {_annual_rows(results)}</table>
+    <table class='data'>{annual_header}
+    {_annual_rows(results, separate)}</table>
     <p class='muted'>本レポートは入力された前提に基づく試算です。税・社会保険・運用結果などを保証するものではありません。</p>
     </body></html>
     """
