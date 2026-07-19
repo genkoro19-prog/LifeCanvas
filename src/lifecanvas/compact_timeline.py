@@ -74,7 +74,14 @@ class CompactTimelineView(QGraphicsView):
                     f"{flow_label} {item.amount / 10_000:,.0f}万円",
                 )
             )
+
+        car_names = [car.name for car in plan.cars if car.enabled]
         for result in results:
+            for text in result.events:
+                if "住み替え" in text or "家を売却" in text:
+                    events.append(LifeEvent(result.offset, "housing", text))
+                elif any(name and name in text for name in car_names):
+                    events.append(LifeEvent(result.offset, "car", text))
             if result.warnings:
                 events.append(
                     LifeEvent(
@@ -112,7 +119,9 @@ class CompactTimelineView(QGraphicsView):
         grouped: dict[tuple[str, int], list[LifeEvent]] = defaultdict(list)
         for event in events:
             if 0 <= event.offset < plan.simulation_years:
-                grouped[(self._lane(event), event.offset)].append(event)
+                key = (self._lane(event), event.offset)
+                if not any(item.title == event.title for item in grouped[key]):
+                    grouped[key].append(event)
 
         for (lane, offset), items in grouped.items():
             if lane not in lane_index:
