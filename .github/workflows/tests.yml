@@ -20,7 +20,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest
       - run: python -m compileall src main.py
-      - name: Smoke-test the completed PC window
+      - name: Smoke-test the revised PC window
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -28,8 +28,8 @@ jobs:
 
           from PySide6.QtWidgets import QApplication
           from PySide6.QtCore import Qt, QCoreApplication
-          from lifecanvas.final_ui import LifeCanvasWindow
-          from lifecanvas.pdf_report import export_pdf
+          from lifecanvas.revision_ui import LifeCanvasWindow
+          from lifecanvas.pdf_report_v2 import export_pdf
           from lifecanvas.plotting import configure_japanese_matplotlib
 
           app = QApplication([])
@@ -40,7 +40,9 @@ jobs:
           assert window.compact_timeline.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
           assert window.year_table.columnCount() == 17
           assert window.child_editor.table.rowCount() >= 1
-          assert hasattr(window, "housing_editor")
+          assert window.housing_editor.mode.findData("rent") >= 0
+          assert window.sample_combo.count() == 2
+          assert window.canvas.minimumHeight() >= 360
           assert hasattr(window, "car_editor")
           assert hasattr(window, "cashflow_event_editor")
           assert hasattr(window, "card_outlook")
@@ -56,5 +58,5 @@ jobs:
           del window
           app.quit()
           del app
-          print("Completed PC UI smoke OK")
+          print("Revised PC UI smoke OK")
           PY
