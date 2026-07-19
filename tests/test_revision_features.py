@@ -133,6 +133,35 @@ def test_both_spouses_can_set_income_from_specific_ages():
     _close(app, window)
 
 
+def test_wallet_editor_switches_to_separate_mode_and_updates_results():
+    app = _app()
+    window = LifeCanvasWindow()
+
+    window.wallet_editor.mode.setCurrentIndex(
+        window.wallet_editor.mode.findData("separate")
+    )
+    window.wallet_editor.initial_husband_cash.set_value(2_000_000)
+    window.wallet_editor.initial_wife_cash.set_value(1_000_000)
+    window.wallet_editor.husband_household_monthly.set_value(350_000)
+    window.wallet_editor.wife_household_monthly.set_value(150_000)
+    window.wallet_editor.minimum_household_cash.set_value(0)
+    window.wallet_editor.target_household_cash.set_value(1_000_000)
+    window.wallet_editor.minimum_personal_cash.set_value(0)
+    window.wallet_editor.target_personal_cash.set_value(500_000)
+    window.recalculate()
+
+    assert window.plan.wallets.mode == "separate"
+    assert window.results[0].household_cash_end != 0
+    assert window.results[0].cash_end == pytest.approx(
+        window.results[0].household_cash_end
+        + window.results[0].husband_cash_end
+        + window.results[0].wife_cash_end
+    )
+    assert "3財布の内訳" in window.dashboard_summary.toPlainText()
+
+    _close(app, window)
+
+
 def test_revised_pdf_can_export_ito_plan(tmp_path: Path):
     plan = build_ito_family_plan()
     results = SimulationEngine(plan).run()

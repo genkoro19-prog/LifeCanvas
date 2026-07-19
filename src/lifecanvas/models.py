@@ -163,9 +163,6 @@ class NisaPlan(BaseModel):
 
     @model_validator(mode="after")
     def migrate_legacy_annual_limit(self) -> "NisaPlan":
-        # Older LifeCanvas files used the accumulation-only 1.2M limit even though the
-        # screen represented the whole NISA account. There was no editable limit field,
-        # so migrate those files to the combined annual allowance automatically.
         if self.annual_limit == 1_200_000:
             self.annual_limit = 3_600_000
         return self
@@ -176,6 +173,32 @@ class NisaPlan(BaseModel):
             if offset >= start:
                 value = self.contribution_changes[start]
         return value
+
+
+class WalletPlan(BaseModel):
+    """Ownership and safety settings for household and personal money."""
+
+    mode: Literal["combined", "separate"] = "combined"
+    initial_husband_cash: float = Field(default=0, ge=0)
+    initial_wife_cash: float = Field(default=0, ge=0)
+    husband_household_monthly: float = Field(default=0, ge=0)
+    wife_household_monthly: float = Field(default=0, ge=0)
+    husband_personal_spending_monthly: float = Field(default=0, ge=0)
+    wife_personal_spending_monthly: float = Field(default=0, ge=0)
+    minimum_household_cash: float = Field(default=1_200_000, ge=0)
+    target_household_cash: float = Field(default=10_000_000, ge=0)
+    minimum_personal_cash: float = Field(default=300_000, ge=0)
+    target_personal_cash: float = Field(default=1_000_000, ge=0)
+    auto_invest_enabled: bool = False
+    auto_extra_monthly_cap: float = Field(default=300_000, ge=0, le=300_000)
+
+    @model_validator(mode="after")
+    def validate_targets(self) -> "WalletPlan":
+        if self.target_household_cash < self.minimum_household_cash:
+            raise ValueError("共同現預金の目標額は最低額以上にしてください")
+        if self.target_personal_cash < self.minimum_personal_cash:
+            raise ValueError("個人現預金の目標額は最低額以上にしてください")
+        return self
 
 
 class LivingCostPlan(BaseModel):
@@ -214,6 +237,7 @@ class ProjectPlan(BaseModel):
     cars: list[CarPlan] = Field(default_factory=list)
     nisa_accounts: list[NisaPlan]
     living_cost: LivingCostPlan
+    wallets: WalletPlan = Field(default_factory=WalletPlan)
     rules: SystemRules = Field(default_factory=SystemRules)
 
     @model_validator(mode="after")
@@ -268,5 +292,14 @@ class YearResult(BaseModel):
     property_value: float
     mortgage_balance: float
     net_worth: float
+    household_cash_end: float = 0
+    husband_cash_end: float = 0
+    wife_cash_end: float = 0
+    husband_nisa_contributed: float = 0
+    wife_nisa_contributed: float = 0
+    husband_nisa_market_value: float = 0
+    wife_nisa_market_value: float = 0
+    recommended_husband_monthly: float = 0
+    recommended_wife_monthly: float = 0
     events: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

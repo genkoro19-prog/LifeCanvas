@@ -25,9 +25,11 @@ from .housing_editor_v2 import HousingEditor
 from .ito_sample import build_ito_family_plan
 from .pdf_report_v2 import export_pdf
 from .plotting import configure_japanese_matplotlib
-from .rent_engine import SimulationEngine, is_rental_move
+from .rent_engine import is_rental_move
 from .sample import build_genki_family_plan
-from .ui import MetricCard
+from .ui import MetricCard, man
+from .wallet_editor import WalletEditor
+from .wallet_engine import SimulationEngine, recommend_monthly_contributions
 
 # Keep all inherited calculation and export paths on the revised implementations.
 complete_ui_module.SimulationEngine = SimulationEngine
@@ -39,7 +41,7 @@ from .final_ui import LifeCanvasWindow as BaseLifeCanvasWindow
 
 
 class LifeCanvasWindow(BaseLifeCanvasWindow):
-    """Desktop UI with fully synchronized family, income, and result views."""
+    """Desktop UI with synchronized family, owned wallets, income and result views."""
 
     def _install_completion_actions(self) -> None:
         root_layout = self.centralWidget().layout()
@@ -123,8 +125,8 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         layout.addWidget(result_label)
         self.dashboard_summary = QTextEdit()
         self.dashboard_summary.setReadOnly(True)
-        self.dashboard_summary.setMinimumHeight(165)
-        self.dashboard_summary.setMaximumHeight(190)
+        self.dashboard_summary.setMinimumHeight(185)
+        self.dashboard_summary.setMaximumHeight(230)
         layout.addWidget(self.dashboard_summary)
 
         warning_label = QLabel("年ごとの注意")
@@ -143,7 +145,6 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         scroll = super()._build_setup()
         layout = scroll.widget().layout()
 
-        # Replace the old husband-only period editor with matching editors for both spouses.
         old_index = layout.indexOf(self.husband_income_editor)
         self.husband_income_editor.hide()
         self.husband_age_income = AgeIncomeEditor(
@@ -159,7 +160,10 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         layout.insertWidget(max(0, old_index), self.husband_age_income)
         layout.insertWidget(max(0, old_index + 1), self.wife_age_income)
 
-        # Hide the obsolete child-linked wife salary fields while retaining retirement inputs.
+        self.wallet_editor = WalletEditor(self.plan)
+        layout.insertWidget(max(0, old_index + 2), self.wallet_editor)
+        self.wallet_editor.recommendationRequested.connect(self._recommend_investment)
+
         work_group = self.w_before.parentWidget()
         if hasattr(work_group, "setTitle"):
             work_group.setTitle("定年の基本設定")
@@ -176,6 +180,7 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         self.child_editor.changed.connect(self._schedule_refresh)
         self.husband_age_income.changed.connect(self._schedule_refresh)
         self.wife_age_income.changed.connect(self._schedule_refresh)
+        self.wallet_editor.changed.connect(self._schedule_refresh)
 
     def _apply_inputs(self) -> None:
         super()._apply_inputs()
@@ -210,6 +215,8 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         self.plan.wife.annual_gross_income = (
             wife_current.annual_gross_income if wife_current else 0
         )
+        self.plan.wallets = self.wallet_editor.value()
+        self.plan.rules.minimum_cash_reserve = self.plan.wallets.minimum_household_cash
 
     def _sync_inputs_from_plan(self) -> None:
         super()._sync_inputs_from_plan()
@@ -217,6 +224,49 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
             self.husband_age_income.load(self.plan)
         if hasattr(self, "wife_age_income"):
             self.wife_age_income.load(self.plan)
+        if hasattr(self, "wallet_editor"):
+            self.wallet_editor.load(self.plan)
+
+    def _recommend_investment(self) -> None:
+        try:
+            self._apply_inputs()
+            recommendation = recommend_monthly_contributions(self.plan)
+        except (ValueError, TypeError) as exc:
+            QMessageBox.warning(self, "おすすめ投資額", str(exc))
+            return
+
+        self.wallet_editor.show_recommendation(
+            recommendation.husband_monthly,
+            recommendation.wife_monthly,
+            recommendation.note,
+        )
+        if self.plan.wallets.mode != "separate":
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "おすすめ投資額を反映",
+            "試算した月額を夫婦それぞれのNISA設定へ反映しますか？\n\n"
+            f"夫：月{recommendation.husband_monthly/10_000:,.1f}万円\n"
+            f"妻：月{recommendation.wife_monthly/10_000:,.1f}万円",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if answer != QMessageBox.Yes:
+            return
+
+        for account in self.plan.nisa_accounts:
+            if account.owner == "husband":
+                account.monthly_contribution = recommendation.husband_monthly
+            else:
+                account.monthly_contribution = recommendation.wife_monthly
+            account.contribution_changes = {}
+
+        # Keep inherited NISA fields synchronized with the newly recommended amounts.
+        self.h_nisa_before.set_value(recommendation.husband_monthly)
+        self.h_nisa_after.set_value(recommendation.husband_monthly)
+        self.w_nisa.set_value(recommendation.wife_monthly)
+        self.recalculate()
 
     def _selected_sample(self):
         if self.sample_combo.currentData() == "ito":
@@ -248,6 +298,24 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
             move_year = self.plan.start_year + (self.plan.housing.move_offset or 0)
             self.card_move.value.setText("賃貸へ移る")
             self.card_move.note.setText(f"{move_year}年・月額家賃を反映")
+
+        if self.plan.wallets.mode == "separate" and self.results:
+            minimum_household = min(self.results, key=lambda row: row.household_cash_end)
+            self.card_cash.value.setText(man(minimum_household.household_cash_end))
+            self.card_cash.note.setText(
+                f"共同家計・{minimum_household.calendar_year}年（個人預金は別）"
+            )
+            final = self.results[-1]
+            wallet_text = (
+                self.dashboard_summary.toPlainText().rstrip()
+                + "\n\n【3財布の内訳】\n"
+                + f"共同現預金 {man(final.household_cash_end)} / "
+                + f"夫個人 {man(final.husband_cash_end)} / "
+                + f"妻個人 {man(final.wife_cash_end)}\n"
+                + f"夫NISA {man(final.husband_nisa_market_value)} / "
+                + f"妻NISA {man(final.wife_nisa_market_value)}"
+            )
+            self.dashboard_summary.setPlainText(wallet_text)
 
         if self.figure.axes:
             axis = self.figure.axes[0]
