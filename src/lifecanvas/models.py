@@ -49,6 +49,16 @@ class OneTimeIncome(BaseModel):
     amount: float = Field(default=0, ge=0)
 
 
+class CashFlowEvent(BaseModel):
+    """A user-defined one-off income or expense on the life timeline."""
+
+    label: str
+    offset: int = Field(ge=0)
+    flow_type: Literal["income", "expense"] = "expense"
+    amount: float = Field(default=0, ge=0)
+    category: Literal["family", "work", "housing", "car", "travel", "other"] = "other"
+
+
 class WifeWorkStage(BaseModel):
     key: str
     label: str
@@ -167,6 +177,7 @@ class ProjectPlan(BaseModel):
     wife: PersonPlan
     income_periods: list[IncomePeriod] = Field(default_factory=list)
     one_time_incomes: list[OneTimeIncome] = Field(default_factory=list)
+    cashflow_events: list[CashFlowEvent] = Field(default_factory=list)
     wife_work_stages: list[WifeWorkStage]
     children: list[ChildPlan]
     education: EducationCostPlan
@@ -180,6 +191,9 @@ class ProjectPlan(BaseModel):
     def validate_stages(self) -> "ProjectPlan":
         if not self.wife_work_stages:
             raise ValueError("wife_work_stages must not be empty")
+        for event in self.cashflow_events:
+            if event.offset >= self.simulation_years:
+                raise ValueError("臨時イベントはシミュレーション期間内に設定してください")
         return self
 
 
@@ -195,6 +209,8 @@ class YearResult(BaseModel):
     salary_net: float
     pension_income: float = 0
     one_time_income: float = 0
+    life_event_income: float = 0
+    life_event_expense: float = 0
     benefits: float
     rental_income: float
     total_income: float

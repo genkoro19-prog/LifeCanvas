@@ -190,9 +190,7 @@ class SimulationEngine:
             else:
                 wife_stage = self._wife_stage(offset)
                 wife_gross_annual = (
-                    0.0
-                    if wife_age >= plan.wife.retirement_age
-                    else wife_stage.annual_gross_income
+                    0.0 if wife_age >= plan.wife.retirement_age else wife_stage.annual_gross_income
                 )
                 wife_mode = (
                     SocialInsuranceMode.NONE
@@ -254,6 +252,19 @@ class SimulationEngine:
                 if item.amount > 0 and applies:
                     one_time_income += item.amount
                     events.append(f"{item.label} {item.amount/10_000:.0f}万円")
+
+            life_event_income = 0.0
+            life_event_expense = 0.0
+            for item in plan.cashflow_events:
+                if item.offset != offset:
+                    continue
+                if item.flow_type == "income":
+                    life_event_income += item.amount
+                    sign = "+"
+                else:
+                    life_event_expense += item.amount
+                    sign = "-"
+                events.append(f"{item.label} {sign}{item.amount/10_000:,.0f}万円")
 
             mortgage_payment = 0.0
             mortgage_interest = 0.0
@@ -333,7 +344,13 @@ class SimulationEngine:
                 core_living_annual
                 + children_count * plan.living_cost.annual_child_increment
             ) * ratio
-            consumption = core_living + housing_cost + education_cost + car_cost
+            consumption = (
+                core_living
+                + housing_cost
+                + education_cost
+                + car_cost
+                + life_event_expense
+            )
             salary_net = husband_net.net + wife_net.net
             total_income = (
                 salary_net
@@ -341,6 +358,7 @@ class SimulationEngine:
                 + benefits
                 + rental_income
                 + one_time_income
+                + life_event_income
             )
             living_surplus = total_income - consumption
             cash += living_surplus
@@ -393,9 +411,7 @@ class SimulationEngine:
             investments_market = sum(state.market_value for state in nisa_states)
             investments_book = sum(state.book_value for state in nisa_states)
             property_value = self._property_value(offset)
-            net_worth = (
-                cash + investments_market + property_value - mortgage.balance
-            )
+            net_worth = cash + investments_market + property_value - mortgage.balance
 
             results.append(
                 YearResult(
@@ -410,6 +426,8 @@ class SimulationEngine:
                     salary_net=salary_net,
                     pension_income=pension,
                     one_time_income=one_time_income,
+                    life_event_income=life_event_income,
+                    life_event_expense=life_event_expense,
                     benefits=benefits,
                     rental_income=rental_income,
                     total_income=total_income,

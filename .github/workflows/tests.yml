@@ -15,12 +15,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: sudo apt-get update && sudo apt-get install -y libegl1
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 fonts-noto-cjk
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
       - run: pytest
       - run: python -m compileall src main.py
-      - name: Smoke-test the flexible family window
+      - name: Smoke-test the local insights window
         run: |
           python - <<'PY'
           from PySide6.QtWidgets import QApplication
@@ -32,8 +32,11 @@ jobs:
           assert len(window.results) > 0
           assert window.tabs.tabText(2) == "ライフイベント"
           assert window.compact_timeline.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
-          assert window.year_table.columnCount() == 15
+          assert window.year_table.columnCount() == 17
           assert window.child_editor.table.rowCount() >= 1
+          assert hasattr(window, "cashflow_event_editor")
+          assert hasattr(window, "card_outlook")
+          assert window.figure.axes[0].get_title() == "資産・負債の推移"
           window.close()
           window.deleteLater()
           QCoreApplication.sendPostedEvents(None, 0)
@@ -41,5 +44,5 @@ jobs:
           del window
           app.quit()
           del app
-          print("Flexible family UI smoke OK")
+          print("Local insights UI smoke OK")
           PY

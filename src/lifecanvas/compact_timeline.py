@@ -56,6 +56,24 @@ class CompactTimelineView(QGraphicsView):
             year_text.setPos(x - 18, top - 30)
 
         events = build_life_events(plan)
+        lane_map = {
+            "family": "family",
+            "work": "assets",
+            "housing": "housing",
+            "car": "car",
+            "travel": "assets",
+            "other": "assets",
+        }
+        for item in plan.cashflow_events:
+            flow_label = "収入" if item.flow_type == "income" else "支出"
+            events.append(
+                LifeEvent(
+                    item.offset,
+                    lane_map.get(item.category, "assets"),
+                    item.label,
+                    f"{flow_label} {item.amount / 10_000:,.0f}万円",
+                )
+            )
         for result in results:
             if result.warnings:
                 events.append(
