@@ -8,7 +8,7 @@ on:
 jobs:
   test-and-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -19,21 +19,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y libegl1 fonts-noto-cjk
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
-      - name: Run focused rental regression
-        id: pytest
-        continue-on-error: true
-        run: pytest -vv -s tests/test_revision_features.py::test_rental_move_becomes_recurring_housing_cost > pytest.log 2>&1
-      - name: Upload pytest diagnostic log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-diagnostic-log
-          path: pytest.log
-      - name: Verify pytest result
-        if: always()
-        run: |
-          cat pytest.log || true
-          test "${{ steps.pytest.outcome }}" = "success"
+      - run: pytest
       - run: python -m compileall src main.py
       - name: Smoke-test the synchronized PC window
         run: |
