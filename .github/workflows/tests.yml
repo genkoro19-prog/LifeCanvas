@@ -8,8 +8,6 @@ on:
 jobs:
   test-and-smoke:
     runs-on: ubuntu-latest
-    env:
-      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,4 +18,4 @@ jobs:
       - run: pytest
       - run: python -m compileall src main.py
       - name: Smoke-test the main window
-        run: python -c "from PySide6.QtWidgets import QApplication; from lifecanvas.ui import LifeCanvasWindow; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0; window.close(); app.processEvents(); app.quit()"
+        run: xvfb-run -a python -c "from PySide6.QtWidgets import QApplication; from lifecanvas.ui import LifeCanvasWindow; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0; window.close(); app.processEvents(); app.quit()"
