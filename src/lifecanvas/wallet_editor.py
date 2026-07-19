@@ -23,6 +23,7 @@ class WalletEditor(QGroupBox):
 
     def __init__(self, plan: ProjectPlan, parent: QWidget | None = None):
         super().__init__("家計の分け方・おすすめ投資", parent)
+        self._loading = False
         layout = QVBoxLayout(self)
 
         note = QLabel(
@@ -67,7 +68,9 @@ class WalletEditor(QGroupBox):
 
         action_row = QHBoxLayout()
         self.recommend_button = QPushButton("おすすめ投資額を試算")
-        self.recommend_button.clicked.connect(self.recommendationRequested)
+        self.recommend_button.clicked.connect(
+            lambda _checked=False: self.recommendationRequested.emit()
+        )
         action_row.addWidget(self.recommend_button)
         action_row.addStretch()
         layout.addLayout(action_row)
@@ -84,7 +87,7 @@ class WalletEditor(QGroupBox):
 
     def _connect_changes(self) -> None:
         self.mode.currentIndexChanged.connect(self._mode_changed)
-        self.auto_invest.toggled.connect(self.changed)
+        self.auto_invest.toggled.connect(lambda _checked: self._emit_changed())
         for editor in (
             self.initial_husband_cash,
             self.initial_wife_cash,
@@ -97,9 +100,13 @@ class WalletEditor(QGroupBox):
             self.minimum_personal_cash,
             self.target_personal_cash,
         ):
-            editor.edit.editingFinished.connect(self.changed)
+            editor.edit.editingFinished.connect(self._emit_changed)
 
-    def _mode_changed(self) -> None:
+    def _emit_changed(self) -> None:
+        if not self._loading:
+            self.changed.emit()
+
+    def _mode_changed(self, *_args) -> None:
         separate = self.mode.currentData() == "separate"
         for widget in (
             self.initial_husband_cash,
@@ -116,26 +123,28 @@ class WalletEditor(QGroupBox):
             self.recommend_button,
         ):
             widget.setEnabled(separate)
-        self.changed.emit()
+        self._emit_changed()
 
     def load(self, plan: ProjectPlan) -> None:
-        wallet = plan.wallets
-        index = self.mode.findData(wallet.mode)
-        self.mode.blockSignals(True)
-        self.mode.setCurrentIndex(max(0, index))
-        self.mode.blockSignals(False)
-        self.initial_husband_cash.set_value(wallet.initial_husband_cash)
-        self.initial_wife_cash.set_value(wallet.initial_wife_cash)
-        self.husband_household_monthly.set_value(wallet.husband_household_monthly)
-        self.wife_household_monthly.set_value(wallet.wife_household_monthly)
-        self.husband_personal_spending.set_value(wallet.husband_personal_spending_monthly)
-        self.wife_personal_spending.set_value(wallet.wife_personal_spending_monthly)
-        self.minimum_household_cash.set_value(wallet.minimum_household_cash)
-        self.target_household_cash.set_value(wallet.target_household_cash)
-        self.minimum_personal_cash.set_value(wallet.minimum_personal_cash)
-        self.target_personal_cash.set_value(wallet.target_personal_cash)
-        self.auto_invest.setChecked(wallet.auto_invest_enabled)
-        self._mode_changed()
+        self._loading = True
+        try:
+            wallet = plan.wallets
+            index = self.mode.findData(wallet.mode)
+            self.mode.setCurrentIndex(max(0, index))
+            self.initial_husband_cash.set_value(wallet.initial_husband_cash)
+            self.initial_wife_cash.set_value(wallet.initial_wife_cash)
+            self.husband_household_monthly.set_value(wallet.husband_household_monthly)
+            self.wife_household_monthly.set_value(wallet.wife_household_monthly)
+            self.husband_personal_spending.set_value(wallet.husband_personal_spending_monthly)
+            self.wife_personal_spending.set_value(wallet.wife_personal_spending_monthly)
+            self.minimum_household_cash.set_value(wallet.minimum_household_cash)
+            self.target_household_cash.set_value(wallet.target_household_cash)
+            self.minimum_personal_cash.set_value(wallet.minimum_personal_cash)
+            self.target_personal_cash.set_value(wallet.target_personal_cash)
+            self.auto_invest.setChecked(wallet.auto_invest_enabled)
+            self._mode_changed()
+        finally:
+            self._loading = False
 
     def value(self) -> WalletPlan:
         return WalletPlan(
