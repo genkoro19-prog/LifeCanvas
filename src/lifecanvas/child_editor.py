@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .family import infer_work_reference_child
 from .models import ChildPlan, ProjectPlan
 
 
@@ -67,7 +68,7 @@ class ChildEditor(QGroupBox):
         self.table.blockSignals(False)
         self._refresh_reference_choices()
 
-        reference = plan.wife_work_reference_child
+        reference = infer_work_reference_child(plan)
         if reference:
             index = self.reference_child.findText(reference)
             if index >= 0:
@@ -101,10 +102,10 @@ class ChildEditor(QGroupBox):
             self.table.removeRow(row)
         self._refresh_reference_choices()
 
-    def _refresh_reference_choices(self) -> None:
+    def _refresh_reference_choices(self, *_args) -> None:
+        current = self.reference_child.currentText() if hasattr(self, "reference_child") else ""
         if not hasattr(self, "reference_child"):
             return
-        current = self.reference_child.currentText()
         names: list[str] = []
         for row in range(self.table.rowCount()):
             item = self.table.item(row, 0)
