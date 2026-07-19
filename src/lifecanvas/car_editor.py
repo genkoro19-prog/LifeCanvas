@@ -55,19 +55,19 @@ class CarEditor(QGroupBox):
         edit = QLineEdit(str(value))
         if align_right:
             edit.setAlignment(Qt.AlignRight)
-        edit.editingFinished.connect(lambda: None)
         return edit
 
     def add_row(self, car: CarPlan | None = None) -> None:
         row = self.table.rowCount()
         self.table.insertRow(row)
         year = self.start_year + (car.purchase_offset if car else min(1, self.simulation_years - 1))
+        cycle = (car.replacement_cycle_years or 0) if car else 0
         values = [
             car.name if car else f"車{row + 1}",
             year,
             f"{(car.purchase_price if car else 0):,.0f}",
             f"{(car.annual_running_cost if car else 0):,.0f}",
-            car.replacement_cycle_years or 0 if car else 0,
+            cycle,
             f"{(car.replacement_price if car else 0):,.0f}",
         ]
         for column, value in enumerate(values):
