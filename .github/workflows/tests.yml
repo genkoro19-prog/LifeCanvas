@@ -8,6 +8,7 @@ on:
 jobs:
   test-and-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -39,7 +40,7 @@ jobs:
           assert window.tabs.tabText(2) == "ライフイベント"
           assert isinstance(window.tabs.widget(0), QScrollArea)
           assert window.compact_timeline.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
-          assert window.year_table.columnCount() == 17
+          assert window.year_table.columnCount() == 19
           assert window.child_editor.table.rowCount() >= 1
           assert window.housing_editor.mode.findData("rent") >= 0
           assert window.sample_combo.count() == 2

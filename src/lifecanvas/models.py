@@ -176,28 +176,38 @@ class NisaPlan(BaseModel):
 
 
 class WalletPlan(BaseModel):
-    """Ownership and safety settings for household and personal money."""
+    """How two separately owned bank accounts pay household and personal costs."""
 
     mode: Literal["combined", "separate"] = "combined"
     initial_husband_cash: float = Field(default=0, ge=0)
     initial_wife_cash: float = Field(default=0, ge=0)
     husband_household_monthly: float = Field(default=0, ge=0)
     wife_household_monthly: float = Field(default=0, ge=0)
+    husband_child_household_increment_monthly: float = Field(default=0, ge=0)
+    wife_child_household_increment_monthly: float = Field(default=0, ge=0)
     husband_personal_spending_monthly: float = Field(default=0, ge=0)
     wife_personal_spending_monthly: float = Field(default=0, ge=0)
-    minimum_household_cash: float = Field(default=1_200_000, ge=0)
-    target_household_cash: float = Field(default=10_000_000, ge=0)
-    minimum_personal_cash: float = Field(default=300_000, ge=0)
+    household_shortfall_husband_percent: float = Field(default=50, ge=0, le=100)
+    household_shortfall_wife_percent: float = Field(default=50, ge=0, le=100)
+    minimum_personal_cash: float = Field(default=1_000_000, ge=0)
     target_personal_cash: float = Field(default=1_000_000, ge=0)
     auto_invest_enabled: bool = False
     auto_extra_monthly_cap: float = Field(default=300_000, ge=0, le=300_000)
 
+    # Deprecated compatibility fields from the temporary three-wallet model.
+    minimum_household_cash: float = Field(default=0, ge=0)
+    target_household_cash: float = Field(default=0, ge=0)
+
     @model_validator(mode="after")
-    def validate_targets(self) -> "WalletPlan":
-        if self.target_household_cash < self.minimum_household_cash:
-            raise ValueError("共同現預金の目標額は最低額以上にしてください")
+    def validate_settings(self) -> "WalletPlan":
+        total = self.household_shortfall_husband_percent + self.household_shortfall_wife_percent
+        if abs(total - 100) > 0.01:
+            raise ValueError("家計不足の負担割合は夫婦合計100%にしてください")
         if self.target_personal_cash < self.minimum_personal_cash:
             raise ValueError("個人現預金の目標額は最低額以上にしてください")
+        # Migrate the first three-wallet release to the intended ¥1M personal floor.
+        if self.minimum_personal_cash == 300_000 and self.target_personal_cash == 1_000_000:
+            self.minimum_personal_cash = 1_000_000
         return self
 
 
@@ -301,5 +311,15 @@ class YearResult(BaseModel):
     wife_nisa_market_value: float = 0
     recommended_husband_monthly: float = 0
     recommended_wife_monthly: float = 0
+    household_cost_net: float = 0
+    household_shortfall: float = 0
+    husband_household_paid: float = 0
+    wife_household_paid: float = 0
+    husband_personal_spending: float = 0
+    wife_personal_spending: float = 0
+    husband_personal_income: float = 0
+    wife_personal_income: float = 0
+    husband_savings_change: float = 0
+    wife_savings_change: float = 0
     events: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

@@ -14,6 +14,7 @@ from .models import (
     ProjectPlan,
     SocialInsuranceMode,
     SystemRules,
+    WalletPlan,
     WifeWorkStage,
 )
 
@@ -162,7 +163,21 @@ def build_genki_family_plan() -> ProjectPlan:
             scope="includes_initial_housing",
             annual_child_increment=0,
         ),
-        rules=SystemRules(minimum_cash_reserve=1_200_000),
+        wallets=WalletPlan(
+            mode="separate",
+            husband_household_monthly=180_000,
+            wife_household_monthly=70_000,
+            husband_child_household_increment_monthly=30_000,
+            wife_child_household_increment_monthly=0,
+            husband_personal_spending_monthly=50_000,
+            wife_personal_spending_monthly=80_000,
+            household_shortfall_husband_percent=50,
+            household_shortfall_wife_percent=50,
+            minimum_personal_cash=1_000_000,
+            target_personal_cash=1_000_000,
+            auto_invest_enabled=False,
+        ),
+        rules=SystemRules(minimum_cash_reserve=1_000_000),
     )
 
 
