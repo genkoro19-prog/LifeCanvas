@@ -6,9 +6,10 @@ from PySide6.QtWidgets import QApplication, QScrollArea
 
 from lifecanvas.ito_sample import build_ito_family_plan
 from lifecanvas.pdf_report_v2 import export_pdf
-from lifecanvas.rent_engine import SimulationEngine, is_rental_move
+from lifecanvas.rent_engine import is_rental_move
 from lifecanvas.revision_ui import LifeCanvasWindow
 from lifecanvas.timeline import build_life_events
+from lifecanvas.wallet_engine import SimulationEngine
 
 
 def _app():
@@ -40,6 +41,9 @@ def test_ito_sample_uses_cautious_unsettled_assumptions():
     assert len(plan.children) == 1
     assert plan.children[0].birth_offset == 5
     assert all(account.monthly_contribution == 0 for account in plan.nisa_accounts)
+    assert plan.wallets.mode == "separate"
+    assert plan.wallets.minimum_personal_cash == 1_000_000
+    assert plan.wallets.husband_child_household_increment_monthly == 50_000
 
 
 def test_rental_move_becomes_recurring_housing_cost():
@@ -133,7 +137,7 @@ def test_both_spouses_can_set_income_from_specific_ages():
     _close(app, window)
 
 
-def test_wallet_editor_switches_to_separate_mode_and_updates_results():
+def test_wallet_editor_uses_two_savings_accounts_and_ratio():
     app = _app()
     window = LifeCanvasWindow()
 
@@ -144,20 +148,21 @@ def test_wallet_editor_switches_to_separate_mode_and_updates_results():
     window.wallet_editor.initial_wife_cash.set_value(1_000_000)
     window.wallet_editor.husband_household_monthly.set_value(350_000)
     window.wallet_editor.wife_household_monthly.set_value(150_000)
-    window.wallet_editor.minimum_household_cash.set_value(0)
-    window.wallet_editor.target_household_cash.set_value(1_000_000)
-    window.wallet_editor.minimum_personal_cash.set_value(0)
-    window.wallet_editor.target_personal_cash.set_value(500_000)
+    window.wallet_editor.husband_child_increment.set_value(50_000)
+    window.wallet_editor.shortfall_husband_percent.set_value(60)
+    window.wallet_editor.shortfall_wife_percent.set_value(40)
+    window.wallet_editor.minimum_personal_cash.set_value(1_000_000)
+    window.wallet_editor.target_personal_cash.set_value(1_000_000)
     window.recalculate()
 
     assert window.plan.wallets.mode == "separate"
-    assert window.results[0].household_cash_end != 0
+    assert window.plan.wallets.household_shortfall_husband_percent == 60
+    assert window.results[0].household_cash_end == 0
     assert window.results[0].cash_end == pytest.approx(
-        window.results[0].household_cash_end
-        + window.results[0].husband_cash_end
-        + window.results[0].wife_cash_end
+        window.results[0].husband_cash_end + window.results[0].wife_cash_end
     )
-    assert "3財布の内訳" in window.dashboard_summary.toPlainText()
+    assert "現在年の夫" in window.dashboard_summary.toPlainText()
+    assert window.year_table.columnCount() == 19
 
     _close(app, window)
 
