@@ -22,4 +22,20 @@ jobs:
       - run: python -m compileall src main.py
       - name: Smoke-test the flexible family window
         run: |
-          python -c "from PySide6.QtWidgets import QApplication; from PySide6.QtCore import Qt; from lifecanvas.final_ui import LifeCanvasWindow; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0; assert window.tabs.tabText(2) == 'ライフイベント'; assert window.compact_timeline.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff; assert window.year_table.columnCount() == 15; assert window.child_editor.table.rowCount() >= 1; window.close(); app.processEvents(); app.quit(); print('Flexible family UI smoke OK')"
+          python - <<'PY'
+          from PySide6.QtWidgets import QApplication
+          from PySide6.QtCore import Qt
+          from lifecanvas.final_ui import LifeCanvasWindow
+
+          app = QApplication([])
+          window = LifeCanvasWindow()
+          assert len(window.results) > 0
+          assert window.tabs.tabText(2) == "ライフイベント"
+          assert window.compact_timeline.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
+          assert window.year_table.columnCount() == 15
+          assert window.child_editor.table.rowCount() >= 1
+          window.close()
+          app.processEvents()
+          app.quit()
+          print("Flexible family UI smoke OK")
+          PY
