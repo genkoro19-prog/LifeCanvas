@@ -4,12 +4,14 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from PySide6.QtWidgets import (
     QComboBox,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QTextEdit,
     QVBoxLayout,
@@ -18,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from . import complete_ui as complete_ui_module
 from . import final_ui as final_ui_module
+from .age_income_editor import AgeIncomeEditor
 from .housing_editor_v2 import HousingEditor
 from .ito_sample import build_ito_family_plan
 from .pdf_report_v2 import export_pdf
@@ -36,7 +39,7 @@ from .final_ui import LifeCanvasWindow as BaseLifeCanvasWindow
 
 
 class LifeCanvasWindow(BaseLifeCanvasWindow):
-    """UI revision with a readable graph, rental housing, and selectable samples."""
+    """Desktop UI with fully synchronized family, income, and result views."""
 
     def _install_completion_actions(self) -> None:
         root_layout = self.centralWidget().layout()
@@ -66,14 +69,23 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         root_layout.insertLayout(2, actions)
 
     def _build_dashboard(self) -> QWidget:
+        """Build a vertically scrollable result page with no floating overlays."""
+
         configure_japanese_matplotlib()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setObjectName("resultScroll")
+
         page = QWidget()
+        page.setObjectName("resultContent")
         layout = QVBoxLayout(page)
-        layout.setSpacing(10)
-        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(12)
+        layout.setContentsMargins(14, 12, 14, 18)
 
         cards = QGridLayout()
-        cards.setHorizontalSpacing(8)
+        cards.setHorizontalSpacing(10)
+        cards.setVerticalSpacing(10)
         self.card_retirement = MetricCard("夫の定年時純資産")
         self.card_cash = MetricCard("最低現預金")
         self.card_shortage = MetricCard("資金ショート")
@@ -89,32 +101,122 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
             self.card_final,
         ]
         for index, card in enumerate(card_items):
+            row, column = divmod(index, 3)
             card.setMinimumWidth(0)
-            cards.addWidget(card, 0, index)
-            cards.setColumnStretch(index, 1)
+            cards.addWidget(card, row, column)
+            cards.setColumnStretch(column, 1)
         layout.addLayout(cards)
 
-        self.figure = Figure(figsize=(11.5, 5.2))
+        graph_title = QLabel("資産・負債の推移")
+        graph_title.setObjectName("sectionTitle")
+        layout.addWidget(graph_title)
+
+        self.figure = Figure(figsize=(11.5, 5.6))
         self.figure.patch.set_facecolor("#ffffff")
         self.canvas = FigureCanvasQTAgg(self.figure)
-        self.canvas.setMinimumHeight(360)
-        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        layout.addWidget(self.canvas, 1)
+        self.canvas.setMinimumHeight(430)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        layout.addWidget(self.canvas)
 
-        details = QHBoxLayout()
-        details.setSpacing(10)
+        result_label = QLabel("判定と確認ポイント")
+        result_label.setObjectName("sectionTitle")
+        layout.addWidget(result_label)
         self.dashboard_summary = QTextEdit()
         self.dashboard_summary.setReadOnly(True)
-        self.dashboard_summary.setMinimumHeight(105)
-        self.dashboard_summary.setMaximumHeight(125)
+        self.dashboard_summary.setMinimumHeight(165)
+        self.dashboard_summary.setMaximumHeight(190)
+        layout.addWidget(self.dashboard_summary)
+
+        warning_label = QLabel("年ごとの注意")
+        warning_label.setObjectName("sectionTitle")
+        layout.addWidget(warning_label)
         self.dashboard_warnings = QListWidget()
-        self.dashboard_warnings.setMinimumHeight(105)
-        self.dashboard_warnings.setMaximumHeight(125)
-        details.addWidget(self.dashboard_summary, 3)
-        details.addWidget(self.dashboard_warnings, 2)
-        layout.addLayout(details)
-        layout.setStretch(1, 1)
-        return page
+        self.dashboard_warnings.setMinimumHeight(145)
+        self.dashboard_warnings.setMaximumHeight(185)
+        layout.addWidget(self.dashboard_warnings)
+
+        layout.addStretch()
+        scroll.setWidget(page)
+        return scroll
+
+    def _build_setup(self) -> QWidget:
+        scroll = super()._build_setup()
+        layout = scroll.widget().layout()
+
+        # Replace the old husband-only period editor with matching editors for both spouses.
+        old_index = layout.indexOf(self.husband_income_editor)
+        self.husband_income_editor.hide()
+        self.husband_age_income = AgeIncomeEditor(
+            self.plan,
+            owner="husband",
+            title="夫の収入計画（年齢ごと）",
+        )
+        self.wife_age_income = AgeIncomeEditor(
+            self.plan,
+            owner="wife",
+            title="妻の収入計画（年齢ごと）",
+        )
+        layout.insertWidget(max(0, old_index), self.husband_age_income)
+        layout.insertWidget(max(0, old_index + 1), self.wife_age_income)
+
+        # Hide the obsolete child-linked wife salary fields while retaining retirement inputs.
+        work_group = self.w_before.parentWidget()
+        if hasattr(work_group, "setTitle"):
+            work_group.setTitle("定年の基本設定")
+        work_form = work_group.layout()
+        for field in (self.w_before, self.w_nursery, self.w_elementary, self.w_junior):
+            label = work_form.labelForField(field) if hasattr(work_form, "labelForField") else None
+            if label:
+                label.hide()
+            field.hide()
+        return scroll
+
+    def _connect_auto_refresh(self) -> None:
+        super()._connect_auto_refresh()
+        self.child_editor.changed.connect(self._schedule_refresh)
+        self.husband_age_income.changed.connect(self._schedule_refresh)
+        self.wife_age_income.changed.connect(self._schedule_refresh)
+
+    def _apply_inputs(self) -> None:
+        super()._apply_inputs()
+        other_periods = [
+            period
+            for period in self.plan.income_periods
+            if period.owner not in ("husband", "wife")
+        ]
+        husband_periods = self.husband_age_income.periods(self.plan)
+        wife_periods = self.wife_age_income.periods(self.plan)
+        self.plan.income_periods = [*other_periods, *husband_periods, *wife_periods]
+
+        husband_current = next(
+            (
+                period
+                for period in husband_periods
+                if period.active(self.plan.husband.current_age)
+            ),
+            None,
+        )
+        wife_current = next(
+            (
+                period
+                for period in wife_periods
+                if period.active(self.plan.wife.current_age)
+            ),
+            None,
+        )
+        self.plan.husband.annual_gross_income = (
+            husband_current.annual_gross_income if husband_current else 0
+        )
+        self.plan.wife.annual_gross_income = (
+            wife_current.annual_gross_income if wife_current else 0
+        )
+
+    def _sync_inputs_from_plan(self) -> None:
+        super()._sync_inputs_from_plan()
+        if hasattr(self, "husband_age_income"):
+            self.husband_age_income.load(self.plan)
+        if hasattr(self, "wife_age_income"):
+            self.wife_age_income.load(self.plan)
 
     def _selected_sample(self):
         if self.sample_combo.currentData() == "ito":
