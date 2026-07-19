@@ -20,4 +20,4 @@ jobs:
       - run: pytest
       - run: python -m compileall src main.py
       - name: Smoke-test the main window
-        run: python -c "from PySide6.QtWidgets import QApplication; from lifecanvas.ui import LifeCanvasWindow; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0"
+        run: python -c "from PySide6.QtWidgets import QApplication; from lifecanvas.ui import LifeCanvasWindow; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0; window.close(); app.processEvents(); app.quit()"
