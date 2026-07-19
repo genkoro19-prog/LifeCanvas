@@ -24,6 +24,7 @@ class WalletEditor(QGroupBox):
     def __init__(self, plan: ProjectPlan, parent: QWidget | None = None):
         super().__init__("夫婦別の預金・家計負担・おすすめ投資", parent)
         self._loading = False
+        self._syncing_ratio = False
         layout = QVBoxLayout(self)
 
         note = QLabel(
@@ -102,6 +103,12 @@ class WalletEditor(QGroupBox):
     def _connect_changes(self) -> None:
         self.mode.currentIndexChanged.connect(self._mode_changed)
         self.auto_invest.toggled.connect(lambda _checked: self._emit_changed())
+        self.shortfall_husband_percent.edit.editingFinished.connect(
+            self._sync_wife_ratio
+        )
+        self.shortfall_wife_percent.edit.editingFinished.connect(
+            self._sync_husband_ratio
+        )
         for editor in (
             self.initial_husband_cash,
             self.initial_wife_cash,
@@ -111,12 +118,34 @@ class WalletEditor(QGroupBox):
             self.wife_child_increment,
             self.husband_personal_spending,
             self.wife_personal_spending,
-            self.shortfall_husband_percent,
-            self.shortfall_wife_percent,
             self.minimum_personal_cash,
             self.target_personal_cash,
         ):
             editor.edit.editingFinished.connect(self._emit_changed)
+
+    def _sync_wife_ratio(self) -> None:
+        if self._syncing_ratio:
+            return
+        self._syncing_ratio = True
+        try:
+            self.shortfall_wife_percent.set_value(
+                100 - self.shortfall_husband_percent.value()
+            )
+        finally:
+            self._syncing_ratio = False
+        self._emit_changed()
+
+    def _sync_husband_ratio(self) -> None:
+        if self._syncing_ratio:
+            return
+        self._syncing_ratio = True
+        try:
+            self.shortfall_husband_percent.set_value(
+                100 - self.shortfall_wife_percent.value()
+            )
+        finally:
+            self._syncing_ratio = False
+        self._emit_changed()
 
     def _emit_changed(self) -> None:
         if not self._loading:
@@ -179,6 +208,10 @@ class WalletEditor(QGroupBox):
             self._loading = False
 
     def value(self) -> WalletPlan:
+        husband_ratio = self.shortfall_husband_percent.value()
+        wife_ratio = 100 - husband_ratio
+        if abs(self.shortfall_wife_percent.value() - wife_ratio) > 0.01:
+            self.shortfall_wife_percent.set_value(wife_ratio)
         return WalletPlan(
             mode=self.mode.currentData(),
             initial_husband_cash=self.initial_husband_cash.value(),
@@ -189,8 +222,8 @@ class WalletEditor(QGroupBox):
             wife_child_household_increment_monthly=self.wife_child_increment.value(),
             husband_personal_spending_monthly=self.husband_personal_spending.value(),
             wife_personal_spending_monthly=self.wife_personal_spending.value(),
-            household_shortfall_husband_percent=self.shortfall_husband_percent.value(),
-            household_shortfall_wife_percent=self.shortfall_wife_percent.value(),
+            household_shortfall_husband_percent=husband_ratio,
+            household_shortfall_wife_percent=wife_ratio,
             minimum_personal_cash=self.minimum_personal_cash.value(),
             target_personal_cash=self.target_personal_cash.value(),
             auto_invest_enabled=self.auto_invest.isChecked(),
