@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QApplication
 
 from lifecanvas.ito_sample import build_ito_family_plan
@@ -43,20 +44,25 @@ def test_rental_move_becomes_recurring_housing_cost():
     results = SimulationEngine(plan).run()
     after_move = results[11]
 
-    assert after_move.housing_cost >= pytest.approx(2_160_000, rel=0.01)
+    assert after_move.housing_cost >= 2_160_000 * 0.99
     assert after_move.property_value == pytest.approx(0)
     assert after_move.mortgage_balance == pytest.approx(0)
     assert not any("__lifecanvas_future_rent__" in event for event in after_move.events)
 
 
-def test_revised_dashboard_reserves_graph_height(qtbot):
+def test_revised_dashboard_reserves_graph_height():
+    app = QApplication.instance() or QApplication([])
     window = LifeCanvasWindow()
-    qtbot.addWidget(window)
 
     assert window.canvas.minimumHeight() >= 360
     assert window.sample_combo.count() == 2
     assert window.housing_editor.mode.findData("rent") >= 0
     assert window.figure.axes[0].get_title() == "資産・負債の推移"
+
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, 0)
+    app.processEvents()
 
 
 def test_revised_pdf_can_export_ito_plan(tmp_path: Path):
