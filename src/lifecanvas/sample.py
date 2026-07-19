@@ -5,9 +5,11 @@ from .models import (
     ChildPlan,
     EducationCostPlan,
     HousingPlan,
+    IncomePeriod,
     LivingCostPlan,
     MortgagePlan,
     NisaPlan,
+    OneTimeIncome,
     PersonPlan,
     ProjectPlan,
     SocialInsuranceMode,
@@ -41,6 +43,28 @@ def build_genki_family_plan() -> ProjectPlan:
             annual_pension=1_200_000,
             social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
         ),
+        income_periods=[
+            IncomePeriod(
+                owner="husband",
+                label="現在の勤務",
+                start_age=34,
+                end_age=60,
+                annual_gross_income=6_200_000,
+                social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+            ),
+            IncomePeriod(
+                owner="husband",
+                label="定年後の継続雇用",
+                start_age=60,
+                end_age=65,
+                annual_gross_income=0,
+                social_insurance_mode=SocialInsuranceMode.EMPLOYEE,
+            ),
+        ],
+        one_time_incomes=[
+            OneTimeIncome(owner="husband", label="夫の退職金", age=60, amount=0),
+            OneTimeIncome(owner="wife", label="妻の退職金", age=55, amount=0),
+        ],
         wife_work_stages=[
             WifeWorkStage(
                 key="full_time",
