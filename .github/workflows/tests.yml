@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y xvfb xauth libxkbcommon-x11-0
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
       - run: pytest
