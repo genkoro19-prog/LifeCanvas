@@ -77,8 +77,24 @@ def test_nisa_lifetime_limit_is_respected():
     assert all(row.investments_book_value <= 36_000_000 + 1 for row in rows)
 
 
-def test_move_pays_off_mortgage():
+def test_keep_home_move_continues_old_mortgage_and_adds_rent():
     plan = build_genki_family_plan()
+    plan.housing.move_mode = "keep"
     row = SimulationEngine(plan).run()[plan.housing.move_offset]
-    assert row.mortgage_balance == pytest.approx(0)
-    assert any("一括返済" in event for event in row.events)
+    assert row.mortgage_balance > 0
+    assert row.rental_income > 0
+    assert any("残して住み替え" in event for event in row.events)
+
+
+def test_sell_home_move_replaces_old_mortgage():
+    plan = build_genki_family_plan()
+    plan.housing.move_mode = "sell"
+    plan.housing.sale_price = 25_000_000
+    plan.housing.new_home_purchase_price = 30_000_000
+    plan.housing.new_mortgage_principal = 20_000_000
+    plan.housing.new_mortgage_term_years = 30
+    plan.housing.new_mortgage_rate_percent = 1.5
+    row = SimulationEngine(plan).run()[plan.housing.move_offset]
+    assert 0 < row.mortgage_balance < 20_000_000
+    assert row.rental_income == 0
+    assert any("売却" in event for event in row.events)

@@ -11,6 +11,10 @@ from .tax import estimate_net_salary
 class MortgageState:
     balance: float
     remaining_months: int
+    initial_rate_percent: float
+    annual_rate_step_percent: float
+    max_rate_percent: float
+    start_offset: int = 0
 
 
 @dataclass
@@ -72,11 +76,12 @@ class SimulationEngine:
         factor = pow(1.0 + monthly_rate, months)
         return balance * monthly_rate * factor / (factor - 1.0)
 
-    def _rate_for_offset(self, offset: int) -> float:
-        loan = self.plan.housing.mortgage
+    @staticmethod
+    def _rate_for_state(mortgage: MortgageState, offset: int) -> float:
+        elapsed = max(0, offset - mortgage.start_offset)
         return min(
-            loan.max_rate_percent,
-            loan.initial_rate_percent + loan.annual_rate_step_percent * offset,
+            mortgage.max_rate_percent,
+            mortgage.initial_rate_percent + mortgage.annual_rate_step_percent * elapsed,
         )
 
     def _initial_core_living_annual(self) -> float:
@@ -117,22 +122,58 @@ class SimulationEngine:
         ]
         return max(active, key=lambda period: period.start_age) if active else None
 
-    def _property_value(self, property_age: int) -> float:
+    def _property_value(self, purchase_price: float, property_age: int) -> float:
+        if purchase_price <= 0:
+            return 0.0
         house = self.plan.housing
-        land = house.purchase_price * house.land_ratio
-        building_initial = house.purchase_price * (1.0 - house.land_ratio)
+        land = purchase_price * house.land_ratio
+        building_initial = purchase_price * (1.0 - house.land_ratio)
         decline = min(1.0, max(0.0, property_age / house.building_depreciation_years))
         building_factor = 1.0 - decline * (1.0 - house.building_floor_ratio)
         return land + building_initial * building_factor
+
+    def _pay_mortgage(
+        self,
+        mortgage: MortgageState,
+        offset: int,
+        months: int,
+    ) -> tuple[float, float, float]:
+        payment = 0.0
+        interest_total = 0.0
+        principal_total = 0.0
+        if mortgage.balance <= 0 or mortgage.remaining_months <= 0:
+            return payment, interest_total, principal_total
+        rate = self._rate_for_state(mortgage, offset)
+        monthly_payment = self._monthly_payment(
+            mortgage.balance,
+            rate,
+            mortgage.remaining_months,
+        )
+        for _ in range(min(months, mortgage.remaining_months)):
+            interest = mortgage.balance * (rate / 100.0 / 12.0)
+            principal = min(mortgage.balance, max(0.0, monthly_payment - interest))
+            mortgage.balance -= principal
+            mortgage.remaining_months -= 1
+            payment += principal + interest
+            interest_total += interest
+            principal_total += principal
+        return payment, interest_total, principal_total
 
     def run(self) -> list[YearResult]:
         plan = self.plan
         results: list[YearResult] = []
         cash = plan.initial_cash
+        mortgage_rules = plan.housing.mortgage
         mortgage = MortgageState(
-            plan.housing.mortgage.principal,
-            plan.housing.mortgage.term_years * 12,
+            balance=mortgage_rules.principal,
+            remaining_months=mortgage_rules.term_years * 12,
+            initial_rate_percent=mortgage_rules.initial_rate_percent,
+            annual_rate_step_percent=mortgage_rules.annual_rate_step_percent,
+            max_rate_percent=mortgage_rules.max_rate_percent,
         )
+        property_purchase_price = plan.housing.purchase_price
+        property_start_offset = 0
+        owns_property = property_purchase_price > 0
         nisa_states = [NisaState(account) for account in plan.nisa_accounts]
         core_living_annual = self._initial_core_living_annual()
         moved = False
@@ -272,49 +313,57 @@ class SimulationEngine:
             housing_cost = 0.0
             rental_income = 0.0
             move_this_year = (
-                plan.housing.move_offset is not None
+                plan.housing.move_mode != "none"
+                and plan.housing.move_offset is not None
                 and offset == plan.housing.move_offset
             )
             if move_this_year and not moved:
-                payoff = mortgage.balance
-                if payoff > 0:
-                    housing_cost += payoff
-                    mortgage_principal += payoff
-                    mortgage.balance = 0.0
-                    mortgage.remaining_months = 0
-                housing_cost += plan.housing.move_cost
-                moved = True
-                events.append(
-                    f"住み替え・住宅ローン一括返済（{payoff/10_000:.0f}万円）"
-                )
-
-            if mortgage.balance > 0 and mortgage.remaining_months > 0:
-                rate = self._rate_for_offset(offset)
-                monthly_payment = self._monthly_payment(
-                    mortgage.balance,
-                    rate,
-                    mortgage.remaining_months,
-                )
-                for _ in range(min(months, mortgage.remaining_months)):
-                    interest = mortgage.balance * (rate / 100.0 / 12.0)
-                    principal = min(
-                        mortgage.balance,
-                        max(0.0, monthly_payment - interest),
+                if plan.housing.move_mode == "sell":
+                    payoff = mortgage.balance
+                    down_payment = max(
+                        0.0,
+                        plan.housing.new_home_purchase_price
+                        - plan.housing.new_mortgage_principal,
                     )
-                    mortgage.balance -= principal
-                    mortgage.remaining_months -= 1
-                    mortgage_payment += principal + interest
-                    mortgage_interest += interest
-                    mortgage_principal += principal
-                housing_cost += mortgage_payment
+                    housing_cost += (
+                        payoff
+                        + plan.housing.move_cost
+                        + down_payment
+                        - plan.housing.sale_price
+                    )
+                    mortgage_principal += payoff
+                    mortgage = MortgageState(
+                        balance=plan.housing.new_mortgage_principal,
+                        remaining_months=plan.housing.new_mortgage_term_years * 12,
+                        initial_rate_percent=plan.housing.new_mortgage_rate_percent,
+                        annual_rate_step_percent=0.0,
+                        max_rate_percent=plan.housing.new_mortgage_rate_percent,
+                        start_offset=offset,
+                    )
+                    property_purchase_price = plan.housing.new_home_purchase_price
+                    property_start_offset = offset
+                    owns_property = property_purchase_price > 0
+                    events.append(
+                        f"今の家を{plan.housing.sale_price/10_000:,.0f}万円で売却し、新居へ住み替え"
+                    )
+                else:
+                    housing_cost += plan.housing.move_cost
+                    events.append("今の家を残して住み替え")
+                moved = True
 
-            mortgage_rules = plan.housing.mortgage
-            housing_cost += (
-                mortgage_rules.property_tax_annual
-                + mortgage_rules.insurance_annual
-                + mortgage_rules.maintenance_annual
-            ) * ratio
-            if moved:
+            payment, interest, principal = self._pay_mortgage(mortgage, offset, months)
+            mortgage_payment += payment
+            mortgage_interest += interest
+            mortgage_principal += principal
+            housing_cost += payment
+
+            if owns_property:
+                housing_cost += (
+                    mortgage_rules.property_tax_annual
+                    + mortgage_rules.insurance_annual
+                    + mortgage_rules.maintenance_annual
+                ) * ratio
+            if moved and plan.housing.move_mode == "keep":
                 housing_cost += plan.housing.new_home_monthly_cost * months
                 rental_income += plan.housing.old_home_net_rent_annual * ratio
 
@@ -324,20 +373,21 @@ class SimulationEngine:
             ) * ratio
 
             car_cost = 0.0
-            if offset >= plan.car.purchase_offset:
-                car_cost += plan.car.annual_running_cost * ratio
-            if offset == plan.car.purchase_offset:
-                car_cost += plan.car.purchase_price
-                events.append("軽自動車を購入")
-            elif (
-                plan.car.replacement_cycle_years
-                and offset > plan.car.purchase_offset
-                and (offset - plan.car.purchase_offset)
-                % plan.car.replacement_cycle_years
-                == 0
-            ):
-                car_cost += plan.car.replacement_price
-                events.append("軽自動車を買い替え")
+            for car in plan.cars:
+                if not car.enabled:
+                    continue
+                if offset >= car.purchase_offset:
+                    car_cost += car.annual_running_cost * ratio
+                if offset == car.purchase_offset:
+                    car_cost += car.purchase_price
+                    events.append(f"{car.name}を購入")
+                elif (
+                    car.replacement_cycle_years
+                    and offset > car.purchase_offset
+                    and (offset - car.purchase_offset) % car.replacement_cycle_years == 0
+                ):
+                    car_cost += car.replacement_price
+                    events.append(f"{car.name}を買い替え")
 
             children_count = len([age for age in child_ages.values() if age <= 21])
             core_living = (
@@ -398,9 +448,7 @@ class SimulationEngine:
                 sold_total += sold
                 cash_need -= sold
             if sold_total > 0:
-                events.append(
-                    f"資金確保のためNISAを{sold_total/10_000:.0f}万円売却"
-                )
+                events.append(f"資金確保のためNISAを{sold_total/10_000:.0f}万円売却")
             if cash < 0:
                 warnings.append(f"資金ショート {-cash/10_000:.0f}万円")
             elif cash < plan.rules.minimum_cash_reserve:
@@ -410,7 +458,14 @@ class SimulationEngine:
 
             investments_market = sum(state.market_value for state in nisa_states)
             investments_book = sum(state.book_value for state in nisa_states)
-            property_value = self._property_value(offset)
+            property_value = (
+                self._property_value(
+                    property_purchase_price,
+                    max(0, offset - property_start_offset),
+                )
+                if owns_property
+                else 0.0
+            )
             net_worth = cash + investments_market + property_value - mortgage.balance
 
             results.append(

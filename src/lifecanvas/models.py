@@ -117,16 +117,34 @@ class MortgagePlan(BaseModel):
 class HousingPlan(BaseModel):
     purchase_price: float = Field(ge=0)
     mortgage: MortgagePlan
+    move_mode: Literal["none", "sell", "keep"] = "keep"
     move_offset: int | None = Field(default=26, ge=0)
     move_cost: float = Field(default=1_000_000, ge=0)
     new_home_monthly_cost: float = Field(default=150_000, ge=0)
     old_home_net_rent_annual: float = Field(default=750_000, ge=0)
+    sale_price: float = Field(default=0, ge=0)
+    new_home_purchase_price: float = Field(default=0, ge=0)
+    new_mortgage_principal: float = Field(default=0, ge=0)
+    new_mortgage_term_years: int = Field(default=35, ge=1, le=50)
+    new_mortgage_rate_percent: float = Field(default=1.5, ge=0, le=20)
     land_ratio: float = Field(default=0.5, ge=0, le=1)
     building_floor_ratio: float = Field(default=0.2, ge=0, le=1)
     building_depreciation_years: int = Field(default=30, ge=1)
 
+    @model_validator(mode="after")
+    def normalize_move(self) -> "HousingPlan":
+        if self.move_mode == "none":
+            self.move_offset = None
+        elif self.move_offset is None:
+            self.move_mode = "none"
+        if self.new_mortgage_principal > self.new_home_purchase_price and self.new_home_purchase_price > 0:
+            raise ValueError("新居の住宅ローンは新居購入額以下にしてください")
+        return self
+
 
 class CarPlan(BaseModel):
+    name: str = "車1"
+    enabled: bool = True
     purchase_offset: int = Field(default=1, ge=0)
     purchase_price: float = Field(default=1_500_000, ge=0)
     annual_running_cost: float = Field(default=350_000, ge=0)
@@ -183,17 +201,25 @@ class ProjectPlan(BaseModel):
     education: EducationCostPlan
     housing: HousingPlan
     car: CarPlan
+    cars: list[CarPlan] = Field(default_factory=list)
     nisa_accounts: list[NisaPlan]
     living_cost: LivingCostPlan
     rules: SystemRules = Field(default_factory=SystemRules)
 
     @model_validator(mode="after")
-    def validate_stages(self) -> "ProjectPlan":
+    def validate_plan(self) -> "ProjectPlan":
         if not self.wife_work_stages:
             raise ValueError("wife_work_stages must not be empty")
         for event in self.cashflow_events:
             if event.offset >= self.simulation_years:
                 raise ValueError("臨時イベントはシミュレーション期間内に設定してください")
+        if not self.cars:
+            self.cars = [self.car.model_copy(deep=True)] if self.car.enabled else []
+        elif self.cars:
+            self.car = self.cars[0].model_copy(deep=True)
+        for vehicle in self.cars:
+            if vehicle.purchase_offset >= self.simulation_years:
+                raise ValueError("車の購入年はシミュレーション期間内に設定してください")
         return self
 
 
