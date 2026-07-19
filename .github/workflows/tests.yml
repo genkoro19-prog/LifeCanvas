@@ -24,7 +24,7 @@ jobs:
         run: |
           python - <<'PY'
           from PySide6.QtWidgets import QApplication
-          from PySide6.QtCore import Qt
+          from PySide6.QtCore import Qt, QCoreApplication
           from lifecanvas.final_ui import LifeCanvasWindow
 
           app = QApplication([])
@@ -35,7 +35,11 @@ jobs:
           assert window.year_table.columnCount() == 15
           assert window.child_editor.table.rowCount() >= 1
           window.close()
+          window.deleteLater()
+          QCoreApplication.sendPostedEvents(None, 0)
           app.processEvents()
+          del window
           app.quit()
+          del app
           print("Flexible family UI smoke OK")
           PY
