@@ -1,0 +1,1 @@
+# LifeCanvas Core Module

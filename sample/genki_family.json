@@ -1,0 +1,322 @@
+{
+  "project": {
+    "name": "genki_family",
+    "version": "1.0",
+    "description": "4人家族ライフプランシミュレーション"
+  },
+  "metadata": {
+    "initial_cash": 1000000,
+    "base_living_cost": 1920000,
+    "simulation_years": 40,
+    "start_month": 9
+  },
+  "family_members": [
+    {
+      "name": "夫",
+      "relation": "husband",
+      "age": 34,
+      "annual_income": 6200000,
+      "bonus": 0,
+      "salary_growth_rate": 0.0,
+      "retirement_age": 65,
+      "pension_start_age": 65,
+      "occupation": "会社員",
+      "income_modifiers": {
+        "age_60_64": 2200000
+      }
+    },
+    {
+      "name": "妻",
+      "relation": "wife",
+      "age": 28,
+      "annual_income": 2300000,
+      "bonus": 0,
+      "salary_growth_rate": 0.0,
+      "retirement_age": 60,
+      "pension_start_age": 65,
+      "occupation": "会社員",
+      "income_modifiers": {
+        "before_birth": 3500000,
+        "childcare_leave_continuous": true,
+        "nursery": 600000,
+        "elementary": 1200000,
+        "junior_high": 2200000,
+        "high_school": 2200000
+      }
+    },
+    {
+      "name": "第一子",
+      "relation": "child",
+      "age": 0,
+      "annual_income": 0,
+      "birth_year_offset": 5
+    },
+    {
+      "name": "第二子",
+      "relation": "child",
+      "age": 0,
+      "annual_income": 0,
+      "birth_year_offset": 6
+    }
+  ],
+  "housing_plans": [
+    {
+      "purchase_price": 31700000,
+      "location": "埼玉県吉川市栄町",
+      "purchase_year": 0,
+      "loan": {
+        "borrowed_amount": 31700000,
+        "term_years": 40,
+        "interest_rate": 1.68,
+        "loan_type": "variable",
+        "repayment_method": "equal_payment",
+        "start_year": 0,
+        "interest_adjustments": {}
+      },
+      "maintenance_cost_cycle_years": 10,
+      "maintenance_cost": 1000000,
+      "annual_property_tax": 120000,
+      "annual_fire_insurance": 20000,
+      "sale_year": 26,
+      "is_rented": false,
+      "rental_start_year": 26,
+      "annual_net_rental_income": 750000,
+      "has_loan_deduction": true,
+      "deduction_rate": 0.007,
+      "deduction_limit_years": 13,
+      "max_deduction_limit": 210000
+    }
+  ],
+  "investment_accounts": [
+    {
+      "account_type": "nisa",
+      "owner": "husband",
+      "initial_balance": 0,
+      "monthly_deposit": 60000,
+      "annual_return_rate": 4.0,
+      "changes_schedule": {
+        "5": {
+          "monthly_deposit": 100000
+        }
+      }
+    },
+    {
+      "account_type": "nisa",
+      "owner": "wife",
+      "initial_balance": 0,
+      "monthly_deposit": 30000,
+      "annual_return_rate": 4.0,
+      "changes_schedule": {}
+    }
+  ],
+  "car_plans": [
+    {
+      "car_type": "軽自動車",
+      "purchase_price": 1500000,
+      "purchase_year": 1,
+      "replacement_cycle_years": 7,
+      "annual_maintenance_cost": 300000,
+      "annual_insurance_cost": 50000,
+      "inspection_cost": 100000
+    }
+  ],
+  "insurance_plans": [],
+  "education_plans": [
+    {
+      "child_name": "第一子",
+      "birth_year_offset": 5,
+      "stage_costs": {
+        "nursery": 150000,
+        "kindergarten": 200000,
+        "elementary": 350000,
+        "junior_high": 550000,
+        "high_school": 550000,
+        "university": 1500000
+      }
+    },
+    {
+      "child_name": "第二子",
+      "birth_year_offset": 6,
+      "stage_costs": {
+        "nursery": 150000,
+        "kindergarten": 200000,
+        "elementary": 350000,
+        "junior_high": 550000,
+        "high_school": 550000,
+        "university": 1500000
+      }
+    }
+  ],
+  "life_events": [
+    {
+      "event_id": "start",
+      "name": "ライフプラン開始",
+      "category": "other",
+      "elapsed_year": 0,
+      "one_time_cost": 0,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "debt_1",
+      "name": "負債返済（月7万円）",
+      "category": "other",
+      "elapsed_year": 1,
+      "one_time_cost": 840000,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "debt_2",
+      "name": "負債返済（月7万円）",
+      "category": "other",
+      "elapsed_year": 2,
+      "one_time_cost": 840000,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "debt_3",
+      "name": "負債返済（月7万円）",
+      "category": "other",
+      "elapsed_year": 3,
+      "one_time_cost": 840000,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "debt_4",
+      "name": "負債返済（月7万円）",
+      "category": "other",
+      "elapsed_year": 4,
+      "one_time_cost": 840000,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "debt_5",
+      "name": "負債返済（月7万円・最終）",
+      "category": "other",
+      "elapsed_year": 5,
+      "one_time_cost": 840000,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "event_2031_2",
+      "name": "育児休業給付開始 (約150万円/年)",
+      "category": "job",
+      "elapsed_year": 5,
+      "one_time_cost": 0,
+      "one_time_income": 0,
+      "details": {
+        "action": "update_benefits",
+        "target": "wife",
+        "value": 1500000
+      }
+    },
+    {
+      "event_id": "event_2031_3",
+      "name": "夫NISA増額 (月10万円へ)",
+      "category": "investment",
+      "elapsed_year": 5,
+      "one_time_cost": 0,
+      "one_time_income": 0,
+      "details": {
+        "action": "update_nisa_deposit",
+        "target": "nisa_husband",
+        "value": 100000
+      }
+    },
+    {
+      "event_id": "event_2032_1",
+      "name": "第二子誕生 & 児童手当増額",
+      "category": "other",
+      "elapsed_year": 6,
+      "one_time_cost": 0,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "event_2033_1",
+      "name": "育児休業給付 終了",
+      "category": "job",
+      "elapsed_year": 7,
+      "one_time_cost": 0,
+      "one_time_income": 0,
+      "details": {
+        "action": "update_benefits",
+        "target": "wife",
+        "value": 0
+      }
+    },
+    {
+      "event_id": "event_2042_1",
+      "name": "住宅築16年: 外壁塗装",
+      "category": "housing",
+      "elapsed_year": 16,
+      "one_time_cost": 1500000,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "event_2043_1",
+      "name": "給湯器等 設備交換",
+      "category": "housing",
+      "elapsed_year": 17,
+      "one_time_cost": 250000,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "event_2048_1",
+      "name": "軽自動車買替",
+      "category": "other",
+      "elapsed_year": 22,
+      "one_time_cost": 1200000,
+      "one_time_income": 0,
+      "details": {}
+    },
+    {
+      "event_id": "event_2052_1",
+      "name": "教育費ピーク終了 / 住宅ローン一括繰上返済",
+      "category": "housing",
+      "elapsed_year": 26,
+      "one_time_cost": 0,
+      "one_time_income": 0,
+      "details": {
+        "action": "trigger_house_sale",
+        "target": 0
+      }
+    },
+    {
+      "event_id": "event_2053_1",
+      "name": "旧居賃貸開始 (家賃収入開始)",
+      "category": "housing",
+      "elapsed_year": 27,
+      "one_time_cost": 0,
+      "one_time_income": 0,
+      "details": {}
+    }
+  ],
+  "scenarios": {
+    "interest_rising": {
+      "description": "金利毎年+0.2%上昇（上限3.0%）",
+      "housing_plans": [
+        {
+          "loan": {
+            "interest_adjustments": {
+              "1": 1.88,
+              "2": 2.08,
+              "3": 2.28,
+              "4": 2.48,
+              "5": 2.68,
+              "6": 2.88,
+              "7": 3.0
+            }
+          }
+        }
+      ]
+    }
+  }
+}
