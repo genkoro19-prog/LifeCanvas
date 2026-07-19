@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import pow
 
-from .models import NisaPlan, ProjectPlan, SocialInsuranceMode, WifeWorkStage, YearResult
+from .models import IncomePeriod, NisaPlan, ProjectPlan, SocialInsuranceMode, WifeWorkStage, YearResult
 from .tax import estimate_net_salary
 
 
@@ -39,7 +39,10 @@ class NisaState:
 
     def grow(self, contribution: float) -> float:
         rate = self.plan.annual_return_percent / 100.0
-        growth = max(-self.market_value, (self.market_value - contribution) * rate + contribution * rate * 0.5)
+        growth = max(
+            -self.market_value,
+            (self.market_value - contribution) * rate + contribution * rate * 0.5,
+        )
         self.market_value += growth
         return growth
 
@@ -71,25 +74,48 @@ class SimulationEngine:
 
     def _rate_for_offset(self, offset: int) -> float:
         loan = self.plan.housing.mortgage
-        return min(loan.max_rate_percent, loan.initial_rate_percent + loan.annual_rate_step_percent * offset)
+        return min(
+            loan.max_rate_percent,
+            loan.initial_rate_percent + loan.annual_rate_step_percent * offset,
+        )
 
     def _initial_core_living_annual(self) -> float:
         living = self.plan.living_cost
         if living.scope == "excludes_housing":
             return living.monthly_amount * 12
         mortgage = self.plan.housing.mortgage
-        first_payment = self._monthly_payment(mortgage.principal, mortgage.initial_rate_percent, mortgage.term_years * 12) * 12
-        recurring_housing = first_payment + mortgage.property_tax_annual + mortgage.insurance_annual + mortgage.maintenance_annual
+        first_payment = self._monthly_payment(
+            mortgage.principal,
+            mortgage.initial_rate_percent,
+            mortgage.term_years * 12,
+        ) * 12
+        recurring_housing = (
+            first_payment
+            + mortgage.property_tax_annual
+            + mortgage.insurance_annual
+            + mortgage.maintenance_annual
+        )
         return max(0.0, living.monthly_amount * 12 - recurring_housing)
 
     def _wife_stage(self, offset: int) -> WifeWorkStage:
         active = [stage for stage in self.plan.wife_work_stages if stage.active(offset)]
         if not active:
             return WifeWorkStage(
-                key="none", label="収入なし", start_offset=0, annual_gross_income=0,
+                key="none",
+                label="収入なし",
+                start_offset=0,
+                annual_gross_income=0,
                 social_insurance_mode=SocialInsuranceMode.NONE,
             )
-        return max(active, key=lambda s: s.start_offset)
+        return max(active, key=lambda stage: stage.start_offset)
+
+    def _income_period(self, owner: str, age: int) -> IncomePeriod | None:
+        active = [
+            period
+            for period in self.plan.income_periods
+            if period.owner == owner and period.active(age)
+        ]
+        return max(active, key=lambda period: period.start_age) if active else None
 
     def _property_value(self, property_age: int) -> float:
         house = self.plan.housing
@@ -103,7 +129,10 @@ class SimulationEngine:
         plan = self.plan
         results: list[YearResult] = []
         cash = plan.initial_cash
-        mortgage = MortgageState(plan.housing.mortgage.principal, plan.housing.mortgage.term_years * 12)
+        mortgage = MortgageState(
+            plan.housing.mortgage.principal,
+            plan.housing.mortgage.term_years * 12,
+        )
         nisa_states = [NisaState(account) for account in plan.nisa_accounts]
         core_living_annual = self._initial_core_living_annual()
         moved = False
@@ -118,25 +147,79 @@ class SimulationEngine:
 
             husband_age = plan.husband.current_age + offset
             wife_age = plan.wife.current_age + offset
-            child_ages = {c.name: offset - c.birth_offset for c in plan.children if offset >= c.birth_offset}
+            child_ages = {
+                child.name: offset - child.birth_offset
+                for child in plan.children
+                if offset >= child.birth_offset
+            }
 
-            husband_gross_annual = plan.husband.annual_gross_income if husband_age < plan.husband.retirement_age else 0.0
+            husband_period = self._income_period("husband", husband_age)
+            if husband_period:
+                husband_gross_annual = husband_period.annual_gross_income
+                husband_mode = husband_period.social_insurance_mode
+                husband_benefit = husband_period.annual_benefit * ratio
+                if husband_age == husband_period.start_age:
+                    events.append(
+                        f"夫の働き方: {husband_period.label}（年収{husband_period.annual_gross_income/10_000:.0f}万円）"
+                    )
+            else:
+                husband_gross_annual = (
+                    plan.husband.annual_gross_income
+                    if husband_age < plan.husband.retirement_age
+                    else 0.0
+                )
+                husband_mode = (
+                    plan.husband.social_insurance_mode
+                    if husband_gross_annual > 0
+                    else SocialInsuranceMode.NONE
+                )
+                husband_benefit = 0.0
             if husband_age == plan.husband.retirement_age:
                 events.append(f"夫が{plan.husband.retirement_age}歳で定年")
             husband_gross = husband_gross_annual * ratio
 
-            wife_stage = self._wife_stage(offset)
-            wife_gross_annual = 0.0 if wife_age >= plan.wife.retirement_age else wife_stage.annual_gross_income
-            wife_mode = SocialInsuranceMode.NONE if wife_age >= plan.wife.retirement_age else wife_stage.social_insurance_mode
-            wife_gross = wife_gross_annual * ratio
-            if offset == wife_stage.start_offset:
-                events.append(f"妻の働き方: {wife_stage.label}（年収{wife_stage.annual_gross_income/10_000:.0f}万円）")
+            wife_period = self._income_period("wife", wife_age)
+            if wife_period:
+                wife_gross_annual = wife_period.annual_gross_income
+                wife_mode = wife_period.social_insurance_mode
+                wife_benefit = wife_period.annual_benefit * ratio
+                if wife_age == wife_period.start_age:
+                    events.append(
+                        f"妻の働き方: {wife_period.label}（年収{wife_period.annual_gross_income/10_000:.0f}万円）"
+                    )
+            else:
+                wife_stage = self._wife_stage(offset)
+                wife_gross_annual = (
+                    0.0
+                    if wife_age >= plan.wife.retirement_age
+                    else wife_stage.annual_gross_income
+                )
+                wife_mode = (
+                    SocialInsuranceMode.NONE
+                    if wife_age >= plan.wife.retirement_age
+                    else wife_stage.social_insurance_mode
+                )
+                wife_benefit = wife_stage.annual_benefit * ratio
+                if offset == wife_stage.start_offset:
+                    events.append(
+                        f"妻の働き方: {wife_stage.label}（年収{wife_stage.annual_gross_income/10_000:.0f}万円）"
+                    )
             if wife_age == plan.wife.retirement_age:
                 events.append(f"妻が{plan.wife.retirement_age}歳で退職")
+            wife_gross = wife_gross_annual * ratio
 
-            housing_credit = min(210_000.0, mortgage.balance * 0.007) if offset < 13 and mortgage.balance > 0 else 0.0
-            h_net = estimate_net_salary(husband_gross, plan.husband.social_insurance_mode, plan.rules, housing_credit)
-            w_net = estimate_net_salary(wife_gross, wife_mode, plan.rules)
+            housing_credit = (
+                min(210_000.0, mortgage.balance * 0.007)
+                if offset < 13 and mortgage.balance > 0
+                else 0.0
+            )
+            husband_net = estimate_net_salary(
+                husband_gross,
+                husband_mode,
+                plan.rules,
+                housing_credit,
+            )
+            wife_net = estimate_net_salary(wife_gross, wife_mode, plan.rules)
 
             pension = 0.0
             if husband_age >= plan.husband.pension_start_age:
@@ -144,7 +227,7 @@ class SimulationEngine:
             if wife_age >= plan.wife.pension_start_age:
                 pension += plan.wife.annual_pension * ratio
 
-            benefits = wife_stage.annual_benefit * ratio
+            benefits = husband_benefit + wife_benefit
             for child in plan.children:
                 age = offset - child.birth_offset
                 if age == 0:
@@ -154,10 +237,33 @@ class SimulationEngine:
                 elif 3 <= age <= 18:
                     benefits += plan.rules.child_allowance_age_3_18_monthly * months
 
-            mortgage_payment = mortgage_interest = mortgage_principal = 0.0
+            one_time_income = 0.0
+            for item in plan.one_time_incomes:
+                item_age = (
+                    husband_age
+                    if item.owner == "husband"
+                    else wife_age
+                    if item.owner == "wife"
+                    else None
+                )
+                applies = (
+                    item_age == item.age
+                    if item_age is not None
+                    else item.owner == "household" and offset == item.age
+                )
+                if item.amount > 0 and applies:
+                    one_time_income += item.amount
+                    events.append(f"{item.label} {item.amount/10_000:.0f}万円")
+
+            mortgage_payment = 0.0
+            mortgage_interest = 0.0
+            mortgage_principal = 0.0
             housing_cost = 0.0
             rental_income = 0.0
-            move_this_year = plan.housing.move_offset is not None and offset == plan.housing.move_offset
+            move_this_year = (
+                plan.housing.move_offset is not None
+                and offset == plan.housing.move_offset
+            )
             if move_this_year and not moved:
                 payoff = mortgage.balance
                 if payoff > 0:
@@ -167,14 +273,23 @@ class SimulationEngine:
                     mortgage.remaining_months = 0
                 housing_cost += plan.housing.move_cost
                 moved = True
-                events.append(f"住み替え・住宅ローン一括返済（{payoff/10_000:.0f}万円）")
+                events.append(
+                    f"住み替え・住宅ローン一括返済（{payoff/10_000:.0f}万円）"
+                )
 
             if mortgage.balance > 0 and mortgage.remaining_months > 0:
                 rate = self._rate_for_offset(offset)
-                monthly_payment = self._monthly_payment(mortgage.balance, rate, mortgage.remaining_months)
+                monthly_payment = self._monthly_payment(
+                    mortgage.balance,
+                    rate,
+                    mortgage.remaining_months,
+                )
                 for _ in range(min(months, mortgage.remaining_months)):
                     interest = mortgage.balance * (rate / 100.0 / 12.0)
-                    principal = min(mortgage.balance, max(0.0, monthly_payment - interest))
+                    principal = min(
+                        mortgage.balance,
+                        max(0.0, monthly_payment - interest),
+                    )
                     mortgage.balance -= principal
                     mortgage.remaining_months -= 1
                     mortgage_payment += principal + interest
@@ -183,12 +298,19 @@ class SimulationEngine:
                 housing_cost += mortgage_payment
 
             mortgage_rules = plan.housing.mortgage
-            housing_cost += (mortgage_rules.property_tax_annual + mortgage_rules.insurance_annual + mortgage_rules.maintenance_annual) * ratio
+            housing_cost += (
+                mortgage_rules.property_tax_annual
+                + mortgage_rules.insurance_annual
+                + mortgage_rules.maintenance_annual
+            ) * ratio
             if moved:
                 housing_cost += plan.housing.new_home_monthly_cost * months
                 rental_income += plan.housing.old_home_net_rent_annual * ratio
 
-            education_cost = sum(plan.education.annual_cost(offset - c.birth_offset) for c in plan.children) * ratio
+            education_cost = sum(
+                plan.education.annual_cost(offset - child.birth_offset)
+                for child in plan.children
+            ) * ratio
 
             car_cost = 0.0
             if offset >= plan.car.purchase_offset:
@@ -199,16 +321,27 @@ class SimulationEngine:
             elif (
                 plan.car.replacement_cycle_years
                 and offset > plan.car.purchase_offset
-                and (offset - plan.car.purchase_offset) % plan.car.replacement_cycle_years == 0
+                and (offset - plan.car.purchase_offset)
+                % plan.car.replacement_cycle_years
+                == 0
             ):
                 car_cost += plan.car.replacement_price
                 events.append("軽自動車を買い替え")
 
             children_count = len([age for age in child_ages.values() if age <= 21])
-            core_living = (core_living_annual + children_count * plan.living_cost.annual_child_increment) * ratio
+            core_living = (
+                core_living_annual
+                + children_count * plan.living_cost.annual_child_increment
+            ) * ratio
             consumption = core_living + housing_cost + education_cost + car_cost
-            salary_net = h_net.net + w_net.net + pension
-            total_income = salary_net + benefits + rental_income
+            salary_net = husband_net.net + wife_net.net
+            total_income = (
+                salary_net
+                + pension
+                + benefits
+                + rental_income
+                + one_time_income
+            )
             living_surplus = total_income - consumption
             cash += living_surplus
 
@@ -229,11 +362,17 @@ class SimulationEngine:
                 contributed += actual
                 state.grow(actual)
             if contributed + 1 < planned:
-                events.append(f"手元資金を守るためNISA積立を{(planned-contributed)/10_000:.0f}万円減額")
+                events.append(
+                    f"手元資金を守るためNISA積立を{(planned-contributed)/10_000:.0f}万円減額"
+                )
 
             sold_total = 0.0
             cash_need = max(0.0, plan.rules.minimum_cash_reserve - cash)
-            for state in sorted(nisa_states, key=lambda s: s.market_value, reverse=True):
+            for state in sorted(
+                nisa_states,
+                key=lambda value: value.market_value,
+                reverse=True,
+            ):
                 if cash_need <= 0:
                     break
                 sold, _ = state.sell(cash_need)
@@ -241,49 +380,59 @@ class SimulationEngine:
                 sold_total += sold
                 cash_need -= sold
             if sold_total > 0:
-                events.append(f"資金確保のためNISAを{sold_total/10_000:.0f}万円売却")
+                events.append(
+                    f"資金確保のためNISAを{sold_total/10_000:.0f}万円売却"
+                )
             if cash < 0:
                 warnings.append(f"資金ショート {-cash/10_000:.0f}万円")
             elif cash < plan.rules.minimum_cash_reserve:
-                warnings.append(f"現預金が目標額を{(plan.rules.minimum_cash_reserve-cash)/10_000:.0f}万円下回る")
+                warnings.append(
+                    f"現預金が目標額を{(plan.rules.minimum_cash_reserve-cash)/10_000:.0f}万円下回る"
+                )
 
-            investments_market = sum(s.market_value for s in nisa_states)
-            investments_book = sum(s.book_value for s in nisa_states)
+            investments_market = sum(state.market_value for state in nisa_states)
+            investments_book = sum(state.book_value for state in nisa_states)
             property_value = self._property_value(offset)
-            net_worth = cash + investments_market + property_value - mortgage.balance
+            net_worth = (
+                cash + investments_market + property_value - mortgage.balance
+            )
 
-            results.append(YearResult(
-                offset=offset,
-                calendar_year=plan.start_year + offset,
-                months=months,
-                husband_age=husband_age,
-                wife_age=wife_age,
-                children_ages=child_ages,
-                husband_gross=husband_gross,
-                wife_gross=wife_gross,
-                salary_net=salary_net,
-                benefits=benefits,
-                rental_income=rental_income,
-                total_income=total_income,
-                core_living_cost=core_living,
-                housing_cost=housing_cost,
-                mortgage_payment=mortgage_payment,
-                mortgage_interest=mortgage_interest,
-                mortgage_principal=mortgage_principal,
-                education_cost=education_cost,
-                car_cost=car_cost,
-                consumption_total=consumption,
-                living_surplus=living_surplus,
-                nisa_planned=planned,
-                nisa_contributed=contributed,
-                nisa_sold=sold_total,
-                cash_end=cash,
-                investments_market_value=investments_market,
-                investments_book_value=investments_book,
-                property_value=property_value,
-                mortgage_balance=mortgage.balance,
-                net_worth=net_worth,
-                events=events,
-                warnings=warnings,
-            ))
+            results.append(
+                YearResult(
+                    offset=offset,
+                    calendar_year=plan.start_year + offset,
+                    months=months,
+                    husband_age=husband_age,
+                    wife_age=wife_age,
+                    children_ages=child_ages,
+                    husband_gross=husband_gross,
+                    wife_gross=wife_gross,
+                    salary_net=salary_net,
+                    pension_income=pension,
+                    one_time_income=one_time_income,
+                    benefits=benefits,
+                    rental_income=rental_income,
+                    total_income=total_income,
+                    core_living_cost=core_living,
+                    housing_cost=housing_cost,
+                    mortgage_payment=mortgage_payment,
+                    mortgage_interest=mortgage_interest,
+                    mortgage_principal=mortgage_principal,
+                    education_cost=education_cost,
+                    car_cost=car_cost,
+                    consumption_total=consumption,
+                    living_surplus=living_surplus,
+                    nisa_planned=planned,
+                    nisa_contributed=contributed,
+                    nisa_sold=sold_total,
+                    cash_end=cash,
+                    investments_market_value=investments_market,
+                    investments_book_value=investments_book,
+                    property_value=property_value,
+                    mortgage_balance=mortgage.balance,
+                    net_worth=net_worth,
+                    events=events,
+                    warnings=warnings,
+                )
+            )
         return results

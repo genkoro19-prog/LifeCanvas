@@ -20,6 +20,6 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest
       - run: python -m compileall src main.py
-      - name: Smoke-test the enhanced main window
+      - name: Smoke-test the complete desktop window
         run: |
-          python -c "from PySide6.QtWidgets import QApplication; from lifecanvas.enhanced_ui import LifeCanvasWindow; from lifecanvas.widgets import NumberEdit; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0; assert isinstance(window.initial_cash, NumberEdit); assert window.tabs.tabText(2) == 'ライフイベント'; window.close(); app.processEvents(); app.quit(); print('Enhanced UI smoke OK')"
+          python -c "from PySide6.QtWidgets import QApplication; from PySide6.QtCore import Qt; from lifecanvas.complete_ui import LifeCanvasWindow; app=QApplication([]); window=LifeCanvasWindow(); assert len(window.results) > 0; assert window.tabs.tabText(2) == 'ライフイベント'; assert window.compact_timeline.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff; assert window.year_table.columnCount() == 15; window.close(); app.processEvents(); app.quit(); print('Complete UI smoke OK')"
