@@ -13,6 +13,8 @@ from .plan_review import check_plan, impact_ranking, scenario_summaries
 from .policy_engine import SimulationEngine, recommend_monthly_contributions
 from .quick_policy_editor import QuickPolicyEditor
 from .revision_ui import LifeCanvasWindow as BaseLifeCanvasWindow
+from .models import SocialInsuranceMode
+from .tax import estimate_net_salary
 from .ui import man
 from .wheel_guard import install_input_wheel_guard
 
@@ -36,6 +38,7 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         if app is not None:
             self._input_wheel_guard = install_input_wheel_guard(app)
 
+        # Add debt editing to the existing setup first, then reorganize all groups.
         legacy_detail = self.tabs.widget(1)
         if hasattr(legacy_detail, "widget") and legacy_detail.widget() is not None:
             legacy_layout = legacy_detail.widget().layout()
@@ -50,15 +53,105 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         self.guided_input = GuidedInputPage(self.plan)
         self.quick_policy = QuickPolicyEditor(self.plan)
         guided_layout = self.guided_input.widget().layout()
+        # The final three items are review, actions, and stretch.
         guided_layout.insertWidget(max(0, guided_layout.count() - 3), self.quick_policy)
+        self._simplify_guided_investment_group()
+        self.guided_input.changed.connect(self._refresh_guided_policy_preview)
+        self.quick_policy.changed.connect(self._refresh_guided_policy_preview)
         self.guided_input.applyRequested.connect(self._apply_guided_input)
         self.tabs.insertTab(1, self.guided_input, "かんたん入力")
 
-        labels = ["結果", "かんたん入力", "詳細設定", "ライフイベント", "年別", "比較"]
+        labels = [
+            "結果",
+            "かんたん入力",
+            "詳細設定",
+            "ライフイベント",
+            "年別",
+            "比較",
+        ]
         for index, label in enumerate(labels):
             if index < self.tabs.count():
                 self.tabs.setTabText(index, label)
         self.tabs.setCurrentIndex(1)
+        self._refresh_guided_policy_preview()
+
+    def _simplify_guided_investment_group(self) -> None:
+        if self.guided_input is None:
+            return
+        group = self.guided_input.husband_household.parentWidget()
+        if hasattr(group, "setTitle"):
+            group.setTitle("3. 基本NISA")
+        form = group.layout()
+        for field in (
+            self.guided_input.husband_household,
+            self.guided_input.husband_child_increment,
+            self.guided_input.shortfall_husband_percent,
+            self.guided_input.shortfall_wife_label,
+            self.guided_input.minimum_cash,
+        ):
+            label = form.labelForField(field) if hasattr(form, "labelForField") else None
+            field.hide()
+            if label is not None:
+                label.hide()
+        wife_label = form.labelForField(self.guided_input.wife_household) if hasattr(form, "labelForField") else None
+        if wife_label is not None:
+            wife_label.setText("妻の家計負担上限")
+
+    def _refresh_guided_policy_preview(self, *_args) -> None:
+        if self.guided_input is None or self.quick_policy is None:
+            return
+        husband_net = estimate_net_salary(
+            self.guided_input.husband_income.value(),
+            SocialInsuranceMode.EMPLOYEE,
+            self.plan.rules,
+        ).net / 12
+        wife_net = estimate_net_salary(
+            self.guided_input.wife_income.value(),
+            SocialInsuranceMode.EMPLOYEE,
+            self.plan.rules,
+        ).net / 12
+        includes_personal = self.guided_input.includes_personal.isChecked()
+        husband_personal = 0 if includes_personal else self.guided_input.husband_personal.value()
+        wife_personal = 0 if includes_personal else self.guided_input.wife_personal.value()
+        wife_after_priority = max(
+            0.0,
+            wife_net - wife_personal - self.guided_input.wife_nisa.value(),
+        )
+        wife_household = min(
+            self.quick_policy.wife_cap.value(),
+            max(0.0, wife_after_priority - self.quick_policy.wife_threshold.value()),
+            self.guided_input.living_monthly.value(),
+        )
+        husband_household = max(0.0, self.guided_input.living_monthly.value() - wife_household)
+        husband_change = (
+            husband_net
+            - husband_household
+            - husband_personal
+            - self.guided_input.husband_nisa.value()
+        )
+        wife_change = (
+            wife_net
+            - wife_household
+            - wife_personal
+            - self.guided_input.wife_nisa.value()
+        )
+        self.guided_input.husband_flow.setText(
+            "<b>夫</b><br>"
+            f"手取り 約{husband_net/10_000:,.1f}万円 − 家計残額{husband_household/10_000:,.1f}万円 "
+            f"− 個人{husband_personal/10_000:,.1f}万円 − NISA{self.guided_input.husband_nisa.value()/10_000:,.1f}万円"
+            f"<br><b>毎月の預金増減 {self.guided_input._signed_money(husband_change)}</b>"
+        )
+        self.guided_input.wife_flow.setText(
+            "<b>妻</b><br>"
+            f"手取り 約{wife_net/10_000:,.1f}万円 − 家計{wife_household/10_000:,.1f}万円 "
+            f"− 個人{wife_personal/10_000:,.1f}万円 − NISA{self.guided_input.wife_nisa.value()/10_000:,.1f}万円"
+            f"<br><b>毎月の預金増減 {self.guided_input._signed_money(wife_change)}</b>"
+        )
+        self.guided_input.household_flow.setText(
+            f"家族の生活費 月{self.guided_input.living_monthly.value()/10_000:,.1f}万円／"
+            f"妻は月{self.quick_policy.wife_threshold.value()/10_000:,.1f}万円を残し、"
+            f"上限{self.quick_policy.wife_cap.value()/10_000:,.1f}万円まで拠出／残額は夫負担"
+        )
 
     def _apply_guided_input(self) -> None:
         if self.guided_input is None:
@@ -96,7 +189,9 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
 
         checks = check_plan(self.plan)
         impacts = impact_ranking(self.plan, self.results)
-        additions: list[str] = ["【入力内容のチェック】"]
+        additions: list[str] = []
+
+        additions.append("【入力内容のチェック】")
         if checks:
             for check in checks[:5]:
                 additions.append(f"・{check.title}：{check.suggestion}")
@@ -109,7 +204,8 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
                 f"・全期間の未充足額：{unmet/10_000:,.0f}万円。現金残高とは分けて表示しています。"
             )
 
-        additions.extend(["", "【将来資産へ影響が大きい項目】"])
+        additions.append("")
+        additions.append("【将来資産へ影響が大きい項目】")
         if impacts:
             for index, item in enumerate(impacts, start=1):
                 additions.append(
