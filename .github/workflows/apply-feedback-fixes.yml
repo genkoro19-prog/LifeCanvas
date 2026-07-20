@@ -1,0 +1,35 @@
+name: apply-feedback-fixes
+
+on:
+  push:
+    branches: [agent/implement-household-nisa-debt-ui]
+    paths:
+      - scripts/apply_feedback_fixes.py
+      - .github/workflows/apply-feedback-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/implement-household-nisa-debt-ui
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Apply feedback fixes
+        run: python scripts/apply_feedback_fixes.py
+      - name: Commit patched source
+        run: |
+          if git diff --quiet; then
+            echo "No source changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src tests
+          git commit -m "Fix detailed categories and spouse cash allocation"
+          git push origin HEAD:agent/implement-household-nisa-debt-ui
