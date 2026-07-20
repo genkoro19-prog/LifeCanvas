@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QFormLayout,
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QPushButton,
     QScrollArea,
     QStackedWidget,
     QVBoxLayout,
@@ -18,8 +19,32 @@ from PySide6.QtWidgets import (
 )
 
 
+class CollapsibleSection(QGroupBox):
+    """A checkable detail section that leaves no blank area while closed."""
+
+    def __init__(self, title: str = "詳細項目", parent: QWidget | None = None):
+        super().__init__(title, parent)
+        self.setCheckable(True)
+        self.setChecked(False)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(4)
+        self.content = QWidget()
+        self.grid = QGridLayout(self.content)
+        self.grid.setContentsMargins(0, 4, 0, 0)
+        self.grid.setHorizontalSpacing(10)
+        self.grid.setVerticalSpacing(8)
+        self.grid.setColumnStretch(0, 1)
+        self.grid.setColumnStretch(1, 1)
+        outer.addWidget(self.content)
+        self.content.setVisible(False)
+        self.toggled.connect(self.content.setVisible)
+
+
 class DetailedSettingsPage(QWidget):
-    """Turn the legacy long form into category navigation with compact two-column pages."""
+    """Category navigation with compact pages and a fixed recalculation action."""
+
+    recalculateRequested = Signal()
 
     CATEGORIES = (
         "基本情報",
@@ -35,55 +60,109 @@ class DetailedSettingsPage(QWidget):
 
     def __init__(self, legacy_scroll: QScrollArea, parent: QWidget | None = None):
         super().__init__(parent)
-        root = QHBoxLayout(self)
+        root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(8)
 
+        toolbar = QHBoxLayout()
+        title = QLabel("詳細設定")
+        title.setStyleSheet("font-size:16px; font-weight:700;")
+        status = QLabel("変更内容は自動計算されます")
+        status.setStyleSheet("color:#667085;")
+        self.recalculate_button = QPushButton("設定を反映して再計算")
+        self.recalculate_button.setObjectName("primaryButton")
+        self.recalculate_button.clicked.connect(
+            lambda _checked=False: self.recalculateRequested.emit()
+        )
+        toolbar.addWidget(title)
+        toolbar.addWidget(status)
+        toolbar.addStretch()
+        toolbar.addWidget(self.recalculate_button)
+        root.addLayout(toolbar)
+
+        body = QHBoxLayout()
+        body.setSpacing(8)
         self.categories = QListWidget()
         self.categories.setFixedWidth(172)
         self.categories.addItems(self.CATEGORIES)
         self.categories.setObjectName("detailCategoryList")
-        root.addWidget(self.categories)
+        body.addWidget(self.categories)
 
         self.stack = QStackedWidget()
-        root.addWidget(self.stack, 1)
+        body.addWidget(self.stack, 1)
+        root.addLayout(body, 1)
 
-        pages: dict[str, tuple[QWidget, QGridLayout]] = {}
+        pages: dict[str, dict[str, object]] = {}
         for category in self.CATEGORIES:
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QFrame.NoFrame)
             content = QWidget()
-            grid = QGridLayout(content)
-            grid.setContentsMargins(12, 10, 12, 14)
-            grid.setHorizontalSpacing(10)
-            grid.setVerticalSpacing(8)
-            grid.setColumnStretch(0, 1)
-            grid.setColumnStretch(1, 1)
+            content_layout = QVBoxLayout(content)
+            content_layout.setContentsMargins(12, 10, 12, 14)
+            content_layout.setSpacing(8)
+
+            primary_grid = QGridLayout()
+            primary_grid.setHorizontalSpacing(10)
+            primary_grid.setVerticalSpacing(8)
+            primary_grid.setColumnStretch(0, 1)
+            primary_grid.setColumnStretch(1, 1)
+            content_layout.addLayout(primary_grid)
+
+            advanced = CollapsibleSection("詳細項目を表示")
+            advanced.hide()
+            content_layout.addWidget(advanced)
+            content_layout.addStretch()
             scroll.setWidget(content)
             self.stack.addWidget(scroll)
-            pages[category] = (content, grid)
+            pages[category] = {
+                "primary": primary_grid,
+                "advanced": advanced,
+                "primary_count": 0,
+                "advanced_count": 0,
+            }
 
         widgets = self._take_widgets(legacy_scroll)
-        counters = {category: 0 for category in self.CATEGORIES}
         for widget in widgets:
             if widget.isHidden() and widget.property("forceCompactVisible") is not True:
                 continue
             category = self._category_for(widget)
-            _, grid = pages[category]
-            index = counters[category]
-            grid.addWidget(widget, index // 2, index % 2, Qt.AlignTop)
-            counters[category] += 1
+            page = pages[category]
+            primary_count = int(page["primary_count"])
+            if primary_count < 2:
+                grid = page["primary"]
+                assert isinstance(grid, QGridLayout)
+                grid.addWidget(widget, primary_count // 2, primary_count % 2, Qt.AlignTop)
+                page["primary_count"] = primary_count + 1
+            else:
+                advanced = page["advanced"]
+                assert isinstance(advanced, CollapsibleSection)
+                advanced_count = int(page["advanced_count"])
+                advanced.grid.addWidget(
+                    widget,
+                    advanced_count // 2,
+                    advanced_count % 2,
+                    Qt.AlignTop,
+                )
+                page["advanced_count"] = advanced_count + 1
+                advanced.show()
             widget.show()
             self._compact(widget)
 
         for category in self.CATEGORIES:
-            _, grid = pages[category]
-            if counters[category] == 0:
+            page = pages[category]
+            primary_count = int(page["primary_count"])
+            advanced_count = int(page["advanced_count"])
+            primary = page["primary"]
+            advanced = page["advanced"]
+            assert isinstance(primary, QGridLayout)
+            assert isinstance(advanced, CollapsibleSection)
+            if primary_count == 0 and advanced_count == 0:
                 note = QLabel("このカテゴリの設定項目はありません。")
                 note.setStyleSheet("color:#6b7280; padding:12px;")
-                grid.addWidget(note, 0, 0, 1, 2)
-            grid.setRowStretch((counters[category] + 1) // 2 + 1, 1)
+                primary.addWidget(note, 0, 0, 1, 2)
+            if advanced_count == 0:
+                advanced.hide()
 
         self.categories.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.categories.setCurrentRow(0)
