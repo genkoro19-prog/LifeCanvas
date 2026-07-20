@@ -27,19 +27,20 @@ def test_husband_works_for_220_man_until_pension():
     assert any("定年" in event for event in age_60.events)
 
 
-def test_wife_income_follows_reference_child_stages():
+def test_wife_income_follows_realistic_standard_return_path():
     rows = results()
-    assert rows[10].wife_gross == pytest.approx(576_000)
-    assert rows[12].wife_gross == pytest.approx(960_000)
-    assert rows[18].wife_gross == pytest.approx(2_200_000)
-    assert rows[27].wife_gross == 0
+    assert rows[5].wife_gross == 0
+    assert rows[7].wife_gross == pytest.approx(2_625_000)
+    assert rows[13].wife_gross == pytest.approx(3_150_000)
+    assert rows[19].wife_gross == pytest.approx(3_500_000)
+    assert rows[32].wife_gross == 0
 
 
-def test_twelve_years_later_is_elementary_stage_not_nursery():
+def test_twelve_years_later_is_still_standard_short_time_stage():
     row = results()[12]
     assert row.wife_age == 40
     assert row.children_ages["第二子"] == 6
-    assert row.wife_gross == pytest.approx(960_000)
+    assert row.wife_gross == pytest.approx(2_625_000)
 
 
 def test_living_and_initial_housing_are_not_double_counted():
@@ -80,6 +81,7 @@ def test_nisa_lifetime_limit_is_respected():
 def test_keep_home_move_continues_old_mortgage_and_adds_rent():
     plan = build_genki_family_plan()
     plan.housing.move_mode = "keep"
+    plan.housing.move_offset = 26
     row = SimulationEngine(plan).run()[plan.housing.move_offset]
     assert row.mortgage_balance > 0
     assert row.rental_income > 0
@@ -89,6 +91,7 @@ def test_keep_home_move_continues_old_mortgage_and_adds_rent():
 def test_sell_home_move_replaces_old_mortgage():
     plan = build_genki_family_plan()
     plan.housing.move_mode = "sell"
+    plan.housing.move_offset = 26
     plan.housing.sale_price = 25_000_000
     plan.housing.new_home_purchase_price = 30_000_000
     plan.housing.new_mortgage_principal = 20_000_000
