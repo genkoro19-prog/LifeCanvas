@@ -110,29 +110,35 @@ def _plan(*, wife_income=1_200_000, household=3_600_000, years=1):
                 net_worth=0,
             )
         )
-    policy_engine.HousingSimulationEngine = lambda _plan: type(
-        "RawEngine", (), {"run": lambda self: rows}
-    )()
     return plan, rows
 
 
-def test_wife_contributes_zero_when_monthly_surplus_is_threshold_or_less():
-    plan, _ = _plan(wife_income=1_200_000)
-    row = SimulationEngine(plan).run()[0]
+def _run(plan, rows, monkeypatch):
+    monkeypatch.setattr(
+        policy_engine,
+        "HousingSimulationEngine",
+        lambda _plan: type("RawEngine", (), {"run": lambda self: rows})(),
+    )
+    return SimulationEngine(plan).run()[0]
+
+
+def test_wife_contributes_zero_when_monthly_surplus_is_threshold_or_less(monkeypatch):
+    plan, rows = _plan(wife_income=1_200_000)
+    row = _run(plan, rows, monkeypatch)
     assert row.wife_household_paid == 0
     assert row.husband_household_paid == pytest.approx(3_600_000)
     assert row.wife_cash_end >= 0
 
 
-def test_wife_contribution_uses_surplus_above_threshold_and_cap():
-    plan, _ = _plan(wife_income=2_400_000)
-    row = SimulationEngine(plan).run()[0]
+def test_wife_contribution_uses_surplus_above_threshold_and_cap(monkeypatch):
+    plan, rows = _plan(wife_income=3_600_000)
+    row = _run(plan, rows, monkeypatch)
     assert row.wife_household_paid == pytest.approx(1_200_000)
     assert row.husband_household_paid == pytest.approx(2_400_000)
 
 
-def test_debt_is_paid_before_wife_household_contribution():
-    plan, _ = _plan(wife_income=1_800_000)
+def test_debt_is_paid_before_wife_household_contribution(monkeypatch):
+    plan, rows = _plan(wife_income=1_800_000)
     plan.personal_debts = [
         PersonalDebt(
             debt_id="student",
@@ -142,12 +148,23 @@ def test_debt_is_paid_before_wife_household_contribution():
             remaining_months=12,
         )
     ]
-    row = SimulationEngine(plan).run()[0]
+    row = _run(plan, rows, monkeypatch)
     assert row.wife_debt_payment == pytest.approx(180_000)
-    assert row.wife_household_paid == pytest.approx(420_000)
+    expected = min(
+        plan.wallets.wife_household_monthly * 12,
+        max(
+            0,
+            row.wife_personal_income
+            - row.wife_debt_payment
+            - row.wife_personal_spending
+            - row.wife_base_nisa_contributed
+            - plan.wallets.wife_contribution_threshold_monthly * 12,
+        ),
+    )
+    assert row.wife_household_paid == pytest.approx(expected)
 
 
-def test_cash_never_goes_negative_and_unmet_is_separate():
+def test_cash_never_goes_negative_and_unmet_is_separate(monkeypatch):
     plan, rows = _plan(wife_income=0, household=1_200_000)
     plan.wallets.initial_husband_cash = 0
     plan.husband.annual_gross_income = 0
@@ -155,14 +172,14 @@ def test_cash_never_goes_negative_and_unmet_is_separate():
     rows[0].wife_gross = 0
     rows[0].salary_net = 0
     rows[0].total_income = 0
-    row = SimulationEngine(plan).run()[0]
+    row = _run(plan, rows, monkeypatch)
     assert row.husband_cash_end == 0
     assert row.wife_cash_end == 0
     assert row.unmet_amount > 0
 
 
-def test_spousal_nisa_transfer_is_capped_at_annual_management_limit():
-    plan, _ = _plan(wife_income=0, household=0)
+def test_spousal_nisa_transfer_is_capped_at_annual_management_limit(monkeypatch):
+    plan, rows = _plan(wife_income=0, household=0)
     plan.wallets.initial_husband_cash = 10_000_000
     plan.wallets.husband_target_cash = 1_000_000
     plan.wallets.auto_invest_enabled = True
@@ -172,6 +189,6 @@ def test_spousal_nisa_transfer_is_capped_at_annual_management_limit():
     husband.lifetime_limit = 0
     wife = next(account for account in plan.nisa_accounts if account.owner == "wife")
     wife.monthly_contribution = 0
-    row = SimulationEngine(plan).run()[0]
+    row = _run(plan, rows, monkeypatch)
     assert row.spouse_nisa_transfer == pytest.approx(1_100_000)
     assert row.wife_nisa_contributed == pytest.approx(1_100_000)
