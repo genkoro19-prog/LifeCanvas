@@ -67,7 +67,7 @@ class DetailedSettingsPage(QWidget):
         widgets = self._take_widgets(legacy_scroll)
         counters = {category: 0 for category in self.CATEGORIES}
         for widget in widgets:
-            if not widget.isVisible() and widget.property("forceCompactVisible") is not True:
+            if widget.isHidden() and widget.property("forceCompactVisible") is not True:
                 continue
             category = self._category_for(widget)
             _, grid = pages[category]
