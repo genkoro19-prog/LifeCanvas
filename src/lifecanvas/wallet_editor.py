@@ -121,7 +121,7 @@ class WalletEditor(QGroupBox):
     def _build_investment_group(self) -> QGroupBox:
         group = QGroupBox("余剰投資")
         form = self._form(group)
-        self.auto_invest = QCheckBox("目標預金を超えた余剰をNISAへ自動追加する")
+        self.auto_invest = QCheckBox("夫の目標預金を超えた余剰を夫NISAへ自動追加する")
         self.auto_extra_cap = NumberEdit(300_000, "円/月", maximum=300_000)
         self.spouse_transfer_enabled = QCheckBox("夫NISA満額後に妻NISAへ資金移転する")
         self.spouse_transfer_limit = NumberEdit(1_100_000, "円/年")

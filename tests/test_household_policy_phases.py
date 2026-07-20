@@ -193,6 +193,18 @@ def test_cash_never_goes_negative_and_unmet_is_separate(monkeypatch):
     assert row.unmet_amount > 0
 
 
+def test_auto_invest_does_not_sweep_wife_surplus(monkeypatch):
+    plan, rows = _plan(wife_income=3_600_000, household=0)
+    plan.wallets.auto_invest_enabled = True
+    plan.wallets.husband_target_cash = 100_000_000
+    wife = next(account for account in plan.nisa_accounts if account.owner == "wife")
+    wife.monthly_contribution = 0
+    row = _run(plan, rows, monkeypatch)
+    assert row.wife_additional_nisa_contributed == 0
+    assert row.wife_nisa_contributed == 0
+    assert row.wife_cash_end == pytest.approx(row.wife_personal_income)
+
+
 def test_spousal_nisa_transfer_is_capped_at_annual_management_limit(monkeypatch):
     plan, rows = _plan(wife_income=0, household=0)
     plan.wallets.initial_husband_cash = 10_000_000

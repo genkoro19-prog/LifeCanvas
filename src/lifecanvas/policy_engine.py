@@ -324,12 +324,9 @@ class SimulationEngine:
                 year.husband_base_nisa += husband_base
 
                 if wallets.auto_invest_enabled:
-                    wife_extra_available = max(0.0, wife_flow_remaining)
-                    wife_extra_desired = min(wallets.auto_extra_monthly_cap, wife_extra_available)
-                    wife_cash, wife_extra = _buy_from_cash(wife_cash, wife_state, wife_extra_desired)
-                    year.wife_extra_nisa += wife_extra
-                    year.planned_nisa += wife_extra_desired
-
+                    # Wife surplus remains in the wife's cash account. Only her configured
+                    # base NISA is paid from her own income; husband-funded additions are
+                    # processed by the explicit spouse-transfer rule below.
                     husband_extra_desired = min(
                         wallets.auto_extra_monthly_cap,
                         max(0.0, husband_cash - wallets.husband_target_cash),

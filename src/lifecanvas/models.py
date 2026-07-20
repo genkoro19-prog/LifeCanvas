@@ -217,7 +217,7 @@ class WalletPlan(BaseModel):
     husband_minimum_cash: float = Field(default=1_000_000, ge=0)
     husband_target_cash: float = Field(default=3_000_000, ge=0)
     husband_monthly_saving_until_target: float = Field(default=50_000, ge=0)
-    auto_invest_enabled: bool = True
+    auto_invest_enabled: bool = False
     auto_extra_monthly_cap: float = Field(default=300_000, ge=0, le=300_000)
     spouse_nisa_transfer_enabled: bool = True
     spouse_nisa_annual_management_limit: float = Field(default=1_100_000, ge=0)
