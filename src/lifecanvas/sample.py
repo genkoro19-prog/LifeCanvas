@@ -196,7 +196,9 @@ def build_genki_family_plan() -> ProjectPlan:
             NisaPlan(
                 owner="husband",
                 monthly_contribution=60_000,
-                contribution_changes={},
+                # The legacy detail field expects a five-year value. Keeping the
+                # same amount avoids a hidden childbirth-time increase or stop.
+                contribution_changes={5: 60_000},
                 annual_return_percent=4.0,
             ),
             NisaPlan(
