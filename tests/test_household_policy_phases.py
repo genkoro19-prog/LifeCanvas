@@ -165,16 +165,16 @@ def test_debt_is_paid_before_wife_household_contribution(monkeypatch):
     ]
     row = _run(plan, rows, monkeypatch)
     assert row.wife_debt_payment == pytest.approx(180_000)
-    expected = min(
-        plan.wallets.wife_household_monthly * 12,
-        max(
-            0,
-            row.wife_personal_income
-            - row.wife_debt_payment
-            - row.wife_personal_spending
-            - row.wife_base_nisa_contributed
-            - plan.wallets.wife_contribution_threshold_monthly * 12,
-        ),
+    annual_surplus = (
+        row.wife_personal_income
+        - row.wife_debt_payment
+        - row.wife_personal_spending
+        - row.wife_base_nisa_contributed
+    )
+    expected = (
+        min(plan.wallets.wife_household_monthly * 12, annual_surplus)
+        if annual_surplus / 12 > plan.wallets.wife_contribution_threshold_monthly
+        else 0
     )
     assert row.wife_household_paid == pytest.approx(expected)
 
