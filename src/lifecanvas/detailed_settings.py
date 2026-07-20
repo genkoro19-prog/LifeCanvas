@@ -72,7 +72,7 @@ class DetailedSettingsPage(QWidget):
         self.recalculate_button = QPushButton("設定を反映して再計算")
         self.recalculate_button.setObjectName("primaryButton")
         self.recalculate_button.clicked.connect(
-            lambda _checked=False: self.recalculateRequested.emit()
+            lambda _checked=False: self._request_recalculation()
         )
         toolbar.addWidget(title)
         toolbar.addWidget(status)
@@ -167,6 +167,13 @@ class DetailedSettingsPage(QWidget):
         self.categories.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.categories.setCurrentRow(0)
         legacy_scroll.deleteLater()
+
+    def _request_recalculation(self) -> None:
+        self.recalculateRequested.emit()
+        top_level = self.window()
+        recalculate = getattr(top_level, "recalculate", None)
+        if callable(recalculate):
+            recalculate()
 
     @staticmethod
     def _take_widgets(scroll: QScrollArea) -> list[QWidget]:
