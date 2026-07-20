@@ -122,11 +122,13 @@ class DetailedSettingsPage(QWidget):
                 "advanced_count": 0,
             }
 
+        self.category_widget_counts = {category: 0 for category in self.CATEGORIES}
         widgets = self._take_widgets(legacy_scroll)
         for widget in widgets:
-            if widget.isHidden() and widget.property("forceCompactVisible") is not True:
+            if widget.property("skipCompactSettings") is True:
                 continue
             category = self._category_for(widget)
+            self.category_widget_counts[category] += 1
             page = pages[category]
             primary_count = int(page["primary_count"])
             if primary_count < 2:
@@ -192,6 +194,9 @@ class DetailedSettingsPage(QWidget):
 
     @classmethod
     def _category_for(cls, widget: QWidget) -> str:
+        explicit = widget.property("settingsCategory")
+        if explicit in cls.CATEGORIES:
+            return str(explicit)
         title = widget.title() if isinstance(widget, QGroupBox) else ""
         key = f"{title} {widget.objectName()} {widget.__class__.__name__}".lower()
         if any(token in key for token in ("借入", "奨学", "イベント", "cashflow")):

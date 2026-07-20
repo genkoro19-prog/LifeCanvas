@@ -293,7 +293,11 @@ class SimulationEngine:
 
                 active_children = sum(1 for age in raw.children_ages.values() if 0 <= age <= 21)
                 wife_cap = wallets.wife_household_monthly + wallets.wife_child_household_increment_monthly * active_children
-                wife_candidate = max(0.0, wife_flow_remaining - wallets.wife_contribution_threshold_monthly)
+                wife_candidate = (
+                    wife_flow_remaining
+                    if wife_flow_remaining > wallets.wife_contribution_threshold_monthly
+                    else 0.0
+                )
                 if wallets.wife_use_existing_cash_for_household:
                     wife_candidate = max(wife_candidate, max(0.0, wife_cash - wallets.wife_contribution_threshold_monthly))
                 wife_household = min(household_monthly_cost, wife_cap, wife_candidate)
@@ -320,7 +324,7 @@ class SimulationEngine:
                 year.husband_base_nisa += husband_base
 
                 if wallets.auto_invest_enabled:
-                    wife_extra_available = max(0.0, wife_flow_remaining - wallets.wife_contribution_threshold_monthly)
+                    wife_extra_available = max(0.0, wife_flow_remaining)
                     wife_extra_desired = min(wallets.auto_extra_monthly_cap, wife_extra_available)
                     wife_cash, wife_extra = _buy_from_cash(wife_cash, wife_state, wife_extra_desired)
                     year.wife_extra_nisa += wife_extra

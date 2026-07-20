@@ -137,6 +137,21 @@ def test_wife_contribution_uses_surplus_above_threshold_and_cap(monkeypatch):
     assert row.husband_household_paid == pytest.approx(2_400_000)
 
 
+def test_threshold_is_gate_not_monthly_deduction(monkeypatch):
+    plan, rows = _plan(wife_income=1_800_000)
+    plan.wallets.wife_household_monthly = 1_000_000
+    row = _run(plan, rows, monkeypatch)
+    annual_surplus = (
+        row.wife_personal_income
+        - row.wife_debt_payment
+        - row.wife_personal_spending
+        - row.wife_base_nisa_contributed
+    )
+    monthly_surplus = annual_surplus / 12
+    assert monthly_surplus > plan.wallets.wife_contribution_threshold_monthly
+    assert row.wife_household_paid == pytest.approx(annual_surplus)
+
+
 def test_debt_is_paid_before_wife_household_contribution(monkeypatch):
     plan, rows = _plan(wife_income=1_800_000)
     plan.personal_debts = [

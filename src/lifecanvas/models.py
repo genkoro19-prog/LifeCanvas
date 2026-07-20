@@ -207,7 +207,7 @@ class WalletPlan(BaseModel):
     initial_husband_cash: float = Field(default=0, ge=0)
     initial_wife_cash: float = Field(default=0, ge=0)
     husband_household_monthly: float = Field(default=0, ge=0)
-    wife_household_monthly: float = Field(default=100_000, ge=0)
+    wife_household_monthly: float = Field(default=150_000, ge=0)
     husband_child_household_increment_monthly: float = Field(default=0, ge=0)
     wife_child_household_increment_monthly: float = Field(default=0, ge=0)
     husband_personal_spending_monthly: float = Field(default=0, ge=0)
@@ -234,6 +234,15 @@ class WalletPlan(BaseModel):
 
     @model_validator(mode="after")
     def validate_settings(self) -> "WalletPlan":
+        legacy_equal_split = (
+            abs(self.household_shortfall_husband_percent - 50) < 0.01
+            and abs(self.household_shortfall_wife_percent - 50) < 0.01
+        )
+        if legacy_equal_split:
+            self.household_shortfall_husband_percent = 100
+            self.household_shortfall_wife_percent = 0
+            if self.wife_household_monthly <= 100_000:
+                self.wife_household_monthly = 150_000
         if self.husband_minimum_cash == 1_000_000 and self.minimum_personal_cash != 1_000_000:
             self.husband_minimum_cash = self.minimum_personal_cash
         if self.husband_target_cash == 3_000_000 and self.target_personal_cash > self.husband_minimum_cash:

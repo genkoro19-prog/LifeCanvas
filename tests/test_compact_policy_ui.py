@@ -20,6 +20,18 @@ def test_guided_window_exposes_compact_detail_and_policy_editors():
         assert window.tabs.tabText(2) == "詳細設定"
         assert isinstance(window.detailed_settings, DetailedSettingsPage)
         assert window.detailed_settings.categories.count() == 9
+        counts = window.detailed_settings.category_widget_counts
+        for category in (
+            "収入・働き方",
+            "家計・預金",
+            "NISA・投資",
+            "子ども・教育",
+            "住宅",
+            "車",
+            "借入・イベント",
+            "年金・計算条件",
+        ):
+            assert counts[category] > 0, category
         assert window.detailed_settings.recalculate_button.isVisibleTo(window.detailed_settings)
         assert window.detailed_settings.findChildren(CollapsibleSection)
         assert window.quick_policy is not None

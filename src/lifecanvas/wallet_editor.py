@@ -113,7 +113,7 @@ class WalletEditor(QGroupBox):
         self.use_wife_cash = QCheckBox("収入不足時に妻の既存預金も家計へ使う")
         form.addRow("現在の預金", self.initial_wife_cash)
         form.addRow("個人支出", self.wife_personal_spending)
-        form.addRow("家計に入れず残す余裕", self.wife_contribution_threshold)
+        form.addRow("家計拠出を始める余剰基準", self.wife_contribution_threshold)
         form.addRow("家計負担上限", self.wife_household_monthly)
         form.addRow(self.use_wife_cash)
         return group

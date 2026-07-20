@@ -42,6 +42,7 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
             legacy_layout.insertWidget(max(0, legacy_layout.count() - 1), self.personal_debt_editor)
             self.personal_debt_editor.changed.connect(self._schedule_refresh)
 
+        self._tag_detailed_settings_categories()
         self.detailed_settings = DetailedSettingsPage(legacy_detail)
         self.tabs.removeTab(1)
         self.tabs.insertTab(1, self.detailed_settings, "詳細設定")
@@ -71,6 +72,38 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         self.tabs.setCurrentIndex(1)
         self._refresh_guided_policy_preview()
         self._input_wheel_guard = install_input_wheel_guard(self)
+
+    def _tag_detailed_settings_categories(self) -> None:
+        def parent_of(name: str):
+            widget = getattr(self, name, None)
+            return widget.parentWidget() if widget is not None else None
+
+        assignments = [
+            (parent_of("start_month"), "基本情報"),
+            (getattr(self, "husband_age_income", None), "収入・働き方"),
+            (getattr(self, "wife_age_income", None), "収入・働き方"),
+            (getattr(self, "wallet_editor", None), "家計・預金"),
+            (parent_of("h_nisa_before"), "NISA・投資"),
+            (getattr(self, "child_editor", None), "子ども・教育"),
+            (getattr(self, "housing_editor", None), "住宅"),
+            (getattr(self, "car_editor", None), "車"),
+            (getattr(self, "cashflow_event_editor", None), "借入・イベント"),
+            (getattr(self, "personal_debt_editor", None), "借入・イベント"),
+            (parent_of("h_retire"), "年金・計算条件"),
+            (parent_of("h_retirement_lump"), "年金・計算条件"),
+        ]
+        for widget, category in assignments:
+            if widget is not None:
+                widget.setProperty("settingsCategory", category)
+
+        # These old cards are replaced by the newer editors above.
+        for widget in (
+            parent_of("first_child_offset"),
+            parent_of("loan_amount"),
+            getattr(self, "husband_income_editor", None),
+        ):
+            if widget is not None:
+                widget.setProperty("skipCompactSettings", True)
 
     def _simplify_guided_investment_group(self) -> None:
         if self.guided_input is None:
@@ -114,9 +147,14 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
             0.0,
             wife_net - wife_personal - self.guided_input.wife_nisa.value(),
         )
+        wife_candidate = (
+            wife_after_priority
+            if wife_after_priority > self.quick_policy.wife_threshold.value()
+            else 0.0
+        )
         wife_household = min(
             self.quick_policy.wife_cap.value(),
-            max(0.0, wife_after_priority - self.quick_policy.wife_threshold.value()),
+            wife_candidate,
             self.guided_input.living_monthly.value(),
         )
         husband_household = max(0.0, self.guided_input.living_monthly.value() - wife_household)
@@ -146,8 +184,8 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         )
         self.guided_input.household_flow.setText(
             f"家族の生活費 月{self.guided_input.living_monthly.value()/10_000:,.1f}万円／"
-            f"妻は月{self.quick_policy.wife_threshold.value()/10_000:,.1f}万円を残し、"
-            f"上限{self.quick_policy.wife_cap.value()/10_000:,.1f}万円まで拠出／残額は夫負担"
+            f"妻の余剰が月{self.quick_policy.wife_threshold.value()/10_000:,.1f}万円以下なら拠出0円、"
+            f"超えた月は余剰全体を上限{self.quick_policy.wife_cap.value()/10_000:,.1f}万円まで拠出／残額は夫負担"
         )
 
     def _apply_guided_input(self) -> None:
