@@ -47,6 +47,22 @@ class WalletEditor(QGroupBox):
         grid.setColumnStretch(1, 1)
         root.addLayout(grid)
 
+        # Hidden compatibility controls keep older saved workflows and tests usable.
+        # The new policy engine does not use a fixed husband cap or shortfall ratio.
+        self.husband_household_monthly = NumberEdit(0, "円/月", parent=self)
+        self.husband_child_increment = NumberEdit(0, "円/月", parent=self)
+        self.shortfall_husband_percent = NumberEdit(100, "%", maximum=100, parent=self)
+        self.shortfall_wife_percent = NumberEdit(0, "%", maximum=100, parent=self)
+        self.minimum_personal_cash = self.husband_minimum_cash
+        self.target_personal_cash = self.husband_target_cash
+        for compatibility_widget in (
+            self.husband_household_monthly,
+            self.husband_child_increment,
+            self.shortfall_husband_percent,
+            self.shortfall_wife_percent,
+        ):
+            compatibility_widget.hide()
+
         actions = QHBoxLayout()
         self.recommend_button = QPushButton("おすすめ基本NISAを試算")
         self.recommend_button.clicked.connect(
@@ -138,6 +154,10 @@ class WalletEditor(QGroupBox):
             self.auto_extra_cap,
             self.spouse_transfer_limit,
             self.other_transfers,
+            self.husband_household_monthly,
+            self.husband_child_increment,
+            self.shortfall_husband_percent,
+            self.shortfall_wife_percent,
         )
 
     def _connect_changes(self) -> None:
@@ -179,6 +199,16 @@ class WalletEditor(QGroupBox):
             self.husband_monthly_saving.set_value(wallet.husband_monthly_saving_until_target)
             self.wife_contribution_threshold.set_value(wallet.wife_contribution_threshold_monthly)
             self.wife_household_monthly.set_value(wallet.wife_household_monthly)
+            self.husband_household_monthly.set_value(wallet.husband_household_monthly)
+            self.husband_child_increment.set_value(
+                wallet.husband_child_household_increment_monthly
+            )
+            self.shortfall_husband_percent.set_value(
+                wallet.household_shortfall_husband_percent
+            )
+            self.shortfall_wife_percent.set_value(
+                wallet.household_shortfall_wife_percent
+            )
             self.use_wife_cash.setChecked(wallet.wife_use_existing_cash_for_household)
             self.auto_invest.setChecked(wallet.auto_invest_enabled)
             self.auto_extra_cap.set_value(wallet.auto_extra_monthly_cap)
@@ -197,9 +227,9 @@ class WalletEditor(QGroupBox):
             mode=self.mode.currentData(),
             initial_husband_cash=self.initial_husband_cash.value(),
             initial_wife_cash=self.initial_wife_cash.value(),
-            husband_household_monthly=0,
+            husband_household_monthly=self.husband_household_monthly.value(),
             wife_household_monthly=self.wife_household_monthly.value(),
-            husband_child_household_increment_monthly=0,
+            husband_child_household_increment_monthly=self.husband_child_increment.value(),
             wife_child_household_increment_monthly=0,
             husband_personal_spending_monthly=self.husband_personal_spending.value(),
             wife_personal_spending_monthly=self.wife_personal_spending.value(),
@@ -214,8 +244,8 @@ class WalletEditor(QGroupBox):
             spouse_nisa_annual_management_limit=self.spouse_transfer_limit.value(),
             spouse_nisa_other_transfers_this_year=self.other_transfers.value(),
             after_nisa_destination=self.after_destination.currentData(),
-            household_shortfall_husband_percent=100,
-            household_shortfall_wife_percent=0,
+            household_shortfall_husband_percent=self.shortfall_husband_percent.value(),
+            household_shortfall_wife_percent=self.shortfall_wife_percent.value(),
             minimum_personal_cash=self.husband_minimum_cash.value(),
             target_personal_cash=self.husband_target_cash.value(),
         )
