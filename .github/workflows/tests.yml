@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   test-and-smoke:
     runs-on: ubuntu-latest
@@ -23,12 +28,28 @@ jobs:
           python -m pip install --upgrade pip -q
           pip install -e ".[dev]" -q
       - name: Run tests
+        id: pytest
+        continue-on-error: true
+        run: pytest > pytest.log 2>&1
+      - name: Report test failure on PR
+        if: steps.pytest.outcome == 'failure' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if ! pytest > pytest.log 2>&1; then
-            cat pytest.log
-            exit 1
-          fi
+          {
+            echo '## CI pytest failure'
+            echo
+            echo '```text'
+            tail -c 50000 pytest.log
+            echo '```'
+          } > pytest-comment.md
+          gh pr comment "$PR_NUMBER" --body-file pytest-comment.md
+      - name: Stop after test failure
+        if: steps.pytest.outcome == 'failure'
+        run: |
           cat pytest.log
+          exit 1
       - run: python -m compileall -q src main.py
       - name: Smoke-test the guided PC window
         run: |
