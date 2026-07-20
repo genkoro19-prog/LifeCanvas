@@ -202,7 +202,9 @@ def test_auto_invest_does_not_sweep_wife_surplus(monkeypatch):
     row = _run(plan, rows, monkeypatch)
     assert row.wife_additional_nisa_contributed == 0
     assert row.wife_nisa_contributed == 0
-    assert row.wife_cash_end == pytest.approx(row.wife_personal_income)
+    assert row.wife_cash_end == pytest.approx(
+        row.wife_personal_income - row.wife_personal_spending
+    )
 
 
 def test_spousal_nisa_transfer_is_capped_at_annual_management_limit(monkeypatch):
