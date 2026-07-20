@@ -215,6 +215,9 @@ class LivingCostPlan(BaseModel):
     monthly_amount: float = Field(default=250_000, ge=0)
     scope: Literal["includes_initial_housing", "excludes_housing"] = "includes_initial_housing"
     annual_child_increment: float = Field(default=0, ge=0)
+    # When true, allowances, entertainment and other personal spending are already
+    # included in monthly_amount and must not be entered again as separate spending.
+    includes_personal_spending: bool = True
 
 
 class SystemRules(BaseModel):
@@ -248,6 +251,7 @@ class ProjectPlan(BaseModel):
     nisa_accounts: list[NisaPlan]
     living_cost: LivingCostPlan
     wallets: WalletPlan = Field(default_factory=WalletPlan)
+    wife_work_preset: Literal["custom", "early", "standard", "care"] = "custom"
     rules: SystemRules = Field(default_factory=SystemRules)
 
     @model_validator(mode="after")
