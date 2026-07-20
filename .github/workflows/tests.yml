@@ -21,7 +21,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest
       - run: python -m compileall src main.py
-      - name: Smoke-test the synchronized PC window
+      - name: Smoke-test the guided PC window
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -29,18 +29,24 @@ jobs:
 
           from PySide6.QtWidgets import QApplication, QScrollArea
           from PySide6.QtCore import Qt, QCoreApplication
-          from lifecanvas.revision_ui import LifeCanvasWindow
+          from lifecanvas.guided_ui import LifeCanvasWindow
           from lifecanvas.pdf_report_v2 import export_pdf
           from lifecanvas.plotting import configure_japanese_matplotlib
 
           app = QApplication([])
           window = LifeCanvasWindow()
           assert len(window.results) > 0
-          assert window.tabs.tabText(1) == "入力"
-          assert window.tabs.tabText(2) == "ライフイベント"
+          assert window.tabs.tabText(0) == "結果"
+          assert window.tabs.tabText(1) == "かんたん入力"
+          assert window.tabs.tabText(2) == "詳細設定"
+          assert window.tabs.tabText(3) == "ライフイベント"
           assert isinstance(window.tabs.widget(0), QScrollArea)
+          assert isinstance(window.guided_input, QScrollArea)
+          assert window.guided_input.apply_button.text() == "この内容で人生プランを計算"
+          assert window.guided_input.review_list.count() >= 1
           assert window.compact_timeline.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
           assert window.year_table.columnCount() == 19
+          assert window.compare_table.rowCount() == 3
           assert window.child_editor.table.rowCount() >= 1
           assert window.housing_editor.mode.findData("rent") >= 0
           assert window.sample_combo.count() == 2
@@ -62,5 +68,5 @@ jobs:
           del window
           app.quit()
           del app
-          print("Synchronized PC UI smoke OK")
+          print("Guided PC UI smoke OK")
           PY

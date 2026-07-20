@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from lifecanvas.revision_ui import run_app
+from lifecanvas.guided_ui import run_app
 
 
 if __name__ == "__main__":
