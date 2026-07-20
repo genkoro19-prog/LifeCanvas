@@ -155,8 +155,15 @@ class LifeTimelineView(QGraphicsView):
         QTimer.singleShot(0, self.scroll_to_start)
 
     def scroll_to_start(self) -> None:
-        self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
-        self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
+        try:
+            horizontal = self.horizontalScrollBar()
+            vertical = self.verticalScrollBar()
+            horizontal.setValue(horizontal.minimum())
+            vertical.setValue(vertical.minimum())
+        except RuntimeError:
+            # A zero-delay callback may outlive a window that was closed immediately
+            # by a UI test or during rapid page replacement.
+            return
 
     def _draw_periods(
         self,
