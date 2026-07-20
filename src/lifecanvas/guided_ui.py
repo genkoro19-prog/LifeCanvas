@@ -34,10 +34,6 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         plan_review_module.SimulationEngine = SimulationEngine
         super().__init__()
 
-        app = QApplication.instance()
-        if app is not None:
-            self._input_wheel_guard = install_input_wheel_guard(app)
-
         # Add debt editing to the existing setup first, then reorganize all groups.
         legacy_detail = self.tabs.widget(1)
         if hasattr(legacy_detail, "widget") and legacy_detail.widget() is not None:
@@ -74,6 +70,7 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
                 self.tabs.setTabText(index, label)
         self.tabs.setCurrentIndex(1)
         self._refresh_guided_policy_preview()
+        self._input_wheel_guard = install_input_wheel_guard(self)
 
     def _simplify_guided_investment_group(self) -> None:
         if self.guided_input is None:
@@ -248,7 +245,6 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
 
 def run_app() -> None:
     app = QApplication.instance() or QApplication([])
-    install_input_wheel_guard(app)
     window = LifeCanvasWindow()
     window.show()
     app.exec()
