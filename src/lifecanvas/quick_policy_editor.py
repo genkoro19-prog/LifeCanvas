@@ -18,16 +18,18 @@ class QuickPolicyEditor(QGroupBox):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(6)
 
-        policy = QGroupBox("育休時の家計と夫の預金")
+        policy = QGroupBox("育休時の家計と夫婦の預金")
         form = QFormLayout(policy)
         form.setVerticalSpacing(5)
         self.wife_threshold = NumberEdit(30_000, "円/月")
         self.wife_cap = NumberEdit(100_000, "円/月")
+        self.wife_target = NumberEdit(3_000_000)
         self.husband_minimum = NumberEdit(1_000_000)
         self.husband_target = NumberEdit(3_000_000)
         self.husband_saving = NumberEdit(50_000, "円/月")
         form.addRow("妻の家計拠出開始基準", self.wife_threshold)
         form.addRow("妻の家計負担上限", self.wife_cap)
+        form.addRow("妻の目標預金", self.wife_target)
         form.addRow("夫の最低維持預金", self.husband_minimum)
         form.addRow("夫の目標預金", self.husband_target)
         form.addRow("目標までの基本貯金", self.husband_saving)
@@ -43,6 +45,7 @@ class QuickPolicyEditor(QGroupBox):
         for editor in (
             self.wife_threshold,
             self.wife_cap,
+            self.wife_target,
             self.husband_minimum,
             self.husband_target,
             self.husband_saving,
@@ -55,6 +58,7 @@ class QuickPolicyEditor(QGroupBox):
         wallet = plan.wallets
         wallet.wife_contribution_threshold_monthly = self.wife_threshold.value()
         wallet.wife_household_monthly = self.wife_cap.value()
+        wallet.wife_target_cash = self.wife_target.value()
         wallet.husband_minimum_cash = self.husband_minimum.value()
         wallet.husband_target_cash = self.husband_target.value()
         wallet.husband_monthly_saving_until_target = self.husband_saving.value()
@@ -66,6 +70,7 @@ class QuickPolicyEditor(QGroupBox):
         wallet = plan.wallets
         self.wife_threshold.set_value(wallet.wife_contribution_threshold_monthly)
         self.wife_cap.set_value(wallet.wife_household_monthly)
+        self.wife_target.set_value(wallet.wife_target_cash)
         self.husband_minimum.set_value(wallet.husband_minimum_cash)
         self.husband_target.set_value(wallet.husband_target_cash)
         self.husband_saving.set_value(wallet.husband_monthly_saving_until_target)

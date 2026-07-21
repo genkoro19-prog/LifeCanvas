@@ -67,6 +67,8 @@ class YearAllocation:
     wife_extra_nisa: float = 0.0
     spouse_transfer: float = 0.0
     planned_nisa: float = 0.0
+    husband_minimum_breach_months: int = 0
+    husband_minimum_shortfall_max: float = 0.0
 
 
 def _income_period(plan: ProjectPlan, owner: str, age: int) -> IncomePeriod | None:
@@ -156,6 +158,24 @@ def _nisa_room(state: NisaState | None) -> float:
     return min(annual, lifetime)
 
 
+def _nisa_milestone_events(
+    owner_label: str,
+    before: float,
+    after: float,
+    lifetime_limit: float,
+) -> list[str]:
+    if lifetime_limit <= 0:
+        return []
+    events: list[str] = []
+    for ratio, label in ((0.25, "1/4"), (0.5, "1/2"), (1.0, "1/1（満額）")):
+        threshold = lifetime_limit * ratio
+        if before + 1 < threshold <= after + 1:
+            events.append(
+                f"{owner_label}NISA {label}到達（買付元本累計{after/10_000:,.0f}万円）"
+            )
+    return events
+
+
 def _buy_from_cash(
     cash: float,
     state: NisaState | None,
@@ -239,10 +259,13 @@ class SimulationEngine:
             wife_state = states.get("wife")
             for state in states.values():
                 state.begin_year()
+            husband_lifetime_before = husband_state.used_lifetime_limit if husband_state else 0.0
+            wife_lifetime_before = wife_state.used_lifetime_limit if wife_state else 0.0
             year = YearAllocation()
             annual_transfer_used = 0.0
 
             for _month in range(months):
+                husband_month_opening = husband_cash
                 husband_cash += husband_monthly_income + household_monthly_surplus
                 wife_cash += wife_monthly_income
                 wife_flow_remaining = wife_monthly_income
@@ -277,9 +300,12 @@ class SimulationEngine:
                         year.husband_unmet += unmet
                     runtime.record(paid, True)
 
-                husband_cash, paid, unmet = _pay_from_cash(husband_cash, wallets.husband_personal_spending_monthly)
+                husband_spending_available = max(0.0, husband_cash - wallets.husband_minimum_cash)
+                husband_spending_desired = wallets.husband_personal_spending_monthly
+                paid = min(husband_spending_available, husband_spending_desired)
+                husband_cash -= paid
                 year.husband_spending += paid
-                year.husband_unmet += unmet
+                year.husband_unmet += husband_spending_desired - paid
                 wife_cash, wife_spent, unmet = _pay_from_cash(wife_cash, wallets.wife_personal_spending_monthly)
                 year.wife_spending += wife_spent
                 year.wife_unmet += unmet
@@ -310,23 +336,43 @@ class SimulationEngine:
                 year.husband_household_paid += husband_household
                 year.household_unmet += household_unmet
 
-                saving_reserve = 0.0
-                if husband_cash < wallets.husband_target_cash:
-                    saving_reserve = min(wallets.husband_monthly_saving_until_target, wallets.husband_target_cash - husband_cash)
+                if husband_month_opening < wallets.husband_target_cash:
+                    husband_cash_goal = min(
+                        wallets.husband_target_cash,
+                        max(
+                            wallets.husband_minimum_cash,
+                            husband_month_opening + wallets.husband_monthly_saving_until_target,
+                        ),
+                    )
+                else:
+                    husband_cash_goal = max(
+                        wallets.husband_minimum_cash,
+                        wallets.husband_target_cash,
+                    )
                 husband_base_desired = husband_state.plan.monthly_for_offset(raw.offset) if husband_state else 0.0
                 year.planned_nisa += husband_base_desired
                 husband_cash, husband_base = _buy_from_cash(
                     husband_cash,
                     husband_state,
                     husband_base_desired,
-                    reserve=wallets.husband_minimum_cash + saving_reserve,
+                    reserve=husband_cash_goal,
                 )
                 year.husband_base_nisa += husband_base
 
                 if wallets.auto_invest_enabled:
-                    # Wife surplus remains in the wife's cash account. Only her configured
-                    # base NISA is paid from her own income; husband-funded additions are
-                    # processed by the explicit spouse-transfer rule below.
+                    wife_extra_desired = min(
+                        wallets.auto_extra_monthly_cap,
+                        max(0.0, wife_cash - wallets.wife_target_cash),
+                    )
+                    wife_cash, wife_extra = _buy_from_cash(
+                        wife_cash,
+                        wife_state,
+                        wife_extra_desired,
+                        reserve=wallets.wife_target_cash,
+                    )
+                    year.wife_extra_nisa += wife_extra
+                    year.planned_nisa += wife_extra_desired
+
                     husband_extra_desired = min(
                         wallets.auto_extra_monthly_cap,
                         max(0.0, husband_cash - wallets.husband_target_cash),
@@ -363,6 +409,13 @@ class SimulationEngine:
                         year.spouse_transfer += actual_transfer
                         year.wife_extra_nisa += actual_transfer
                         year.planned_nisa += transfer_desired
+
+                husband_shortfall = max(0.0, wallets.husband_minimum_cash - husband_cash)
+                if husband_shortfall > 1:
+                    year.husband_minimum_breach_months += 1
+                    year.husband_minimum_shortfall_max = max(
+                        year.husband_minimum_shortfall_max, husband_shortfall
+                    )
                 absolute_month += 1
 
             husband_contributed = year.husband_base_nisa + year.husband_extra_nisa
@@ -372,8 +425,28 @@ class SimulationEngine:
             if wife_state:
                 wife_state.grow(wife_contributed)
 
+            husband_cumulative = husband_state.used_lifetime_limit if husband_state else 0.0
+            wife_cumulative = wife_state.used_lifetime_limit if wife_state else 0.0
             events = _clean_finance_messages(list(raw.events))
             warnings = _clean_finance_messages(list(raw.warnings))
+            if husband_state:
+                events.extend(
+                    _nisa_milestone_events(
+                        "夫",
+                        husband_lifetime_before,
+                        husband_cumulative,
+                        husband_state.plan.lifetime_limit,
+                    )
+                )
+            if wife_state:
+                events.extend(
+                    _nisa_milestone_events(
+                        "妻",
+                        wife_lifetime_before,
+                        wife_cumulative,
+                        wife_state.plan.lifetime_limit,
+                    )
+                )
             if year.wife_household_paid + 1 < wallets.wife_household_monthly * months:
                 events.append(f"妻の収入状況により家計拠出は年間{year.wife_household_paid/10_000:,.0f}万円")
             if year.husband_household_paid > 0:
@@ -383,9 +456,10 @@ class SimulationEngine:
             total_debt = year.husband_debt + year.wife_debt + year.household_debt
             if total_debt > 0:
                 events.append(f"個人借入等を年間{total_debt/10_000:,.0f}万円返済")
-            if husband_cash < wallets.husband_minimum_cash:
+            if year.husband_minimum_breach_months:
                 warnings.append(
-                    f"夫の預金が最低維持預金を{(wallets.husband_minimum_cash-husband_cash)/10_000:,.0f}万円下回る"
+                    f"夫の最低維持預金を最大{year.husband_minimum_shortfall_max/10_000:,.0f}万円下回る"
+                    f"（{year.husband_minimum_breach_months}か月）"
                 )
             if year.household_unmet > 1:
                 warnings.append(f"家計支出を満たせず未充足額{year.household_unmet/10_000:,.0f}万円")
@@ -412,6 +486,8 @@ class SimulationEngine:
             row.household_cash_end = 0.0
             row.husband_cash_end = max(0.0, husband_cash)
             row.wife_cash_end = max(0.0, wife_cash)
+            row.husband_minimum_cash_shortfall = year.husband_minimum_shortfall_max
+            row.husband_minimum_cash_breach_months = year.husband_minimum_breach_months
             row.husband_nisa_contributed = husband_contributed
             row.wife_nisa_contributed = wife_contributed
             row.husband_base_nisa_contributed = year.husband_base_nisa
@@ -419,6 +495,8 @@ class SimulationEngine:
             row.husband_additional_nisa_contributed = year.husband_extra_nisa
             row.wife_additional_nisa_contributed = year.wife_extra_nisa
             row.spouse_nisa_transfer = year.spouse_transfer
+            row.husband_nisa_cumulative_contributed = husband_cumulative
+            row.wife_nisa_cumulative_contributed = wife_cumulative
             row.husband_nisa_market_value = husband_market
             row.wife_nisa_market_value = wife_market
             row.recommended_husband_monthly = husband_contributed / months
@@ -455,7 +533,7 @@ def _is_safe(plan: ProjectPlan, owner: str) -> bool:
         floor = plan.wallets.husband_minimum_cash
         values = [row.husband_cash_end for row in results]
     else:
-        floor = 0.0
+        floor = plan.wallets.wife_target_cash
         values = [row.wife_cash_end for row in results]
     return min(values) >= floor and not any(row.unmet_amount > 1 for row in results)
 

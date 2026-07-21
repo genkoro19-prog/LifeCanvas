@@ -162,7 +162,7 @@ def test_wallet_editor_uses_two_savings_accounts_and_ratio():
         window.results[0].husband_cash_end + window.results[0].wife_cash_end
     )
     assert "現在年の夫" in window.dashboard_summary.toPlainText()
-    assert window.year_table.columnCount() == 19
+    assert window.year_table.columnCount() == 26
 
     _close(app, window)
 

@@ -214,6 +214,7 @@ class WalletPlan(BaseModel):
     wife_personal_spending_monthly: float = Field(default=0, ge=0)
     wife_contribution_threshold_monthly: float = Field(default=30_000, ge=0)
     wife_use_existing_cash_for_household: bool = False
+    wife_target_cash: float = Field(default=3_000_000, ge=0)
     husband_minimum_cash: float = Field(default=1_000_000, ge=0)
     husband_target_cash: float = Field(default=3_000_000, ge=0)
     husband_monthly_saving_until_target: float = Field(default=50_000, ge=0)
@@ -349,6 +350,8 @@ class YearResult(BaseModel):
     household_cash_end: float = 0
     husband_cash_end: float = 0
     wife_cash_end: float = 0
+    husband_minimum_cash_shortfall: float = 0
+    husband_minimum_cash_breach_months: int = 0
     husband_nisa_contributed: float = 0
     wife_nisa_contributed: float = 0
     husband_base_nisa_contributed: float = 0
@@ -356,6 +359,8 @@ class YearResult(BaseModel):
     husband_additional_nisa_contributed: float = 0
     wife_additional_nisa_contributed: float = 0
     spouse_nisa_transfer: float = 0
+    husband_nisa_cumulative_contributed: float = 0
+    wife_nisa_cumulative_contributed: float = 0
     husband_nisa_market_value: float = 0
     wife_nisa_market_value: float = 0
     recommended_husband_monthly: float = 0

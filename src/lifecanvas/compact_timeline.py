@@ -82,6 +82,8 @@ class CompactTimelineView(QGraphicsView):
                     events.append(LifeEvent(result.offset, "housing", text))
                 elif any(name and name in text for name in car_names):
                     events.append(LifeEvent(result.offset, "car", text))
+                elif "NISA 1/" in text:
+                    events.append(LifeEvent(result.offset, "assets", text))
             if result.warnings:
                 events.append(
                     LifeEvent(

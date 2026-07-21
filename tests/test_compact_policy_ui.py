@@ -35,6 +35,7 @@ def test_guided_window_exposes_compact_detail_and_policy_editors():
         assert window.detailed_settings.recalculate_button.isVisibleTo(window.detailed_settings)
         assert window.detailed_settings.findChildren(CollapsibleSection)
         assert window.quick_policy is not None
+        assert window.quick_policy.wife_target.value() == window.plan.wallets.wife_target_cash
         assert window.personal_debt_editor is not None
         assert isinstance(app.property("lifecanvasInputWheelGuard"), InputWheelGuard)
     finally:

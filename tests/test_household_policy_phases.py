@@ -221,3 +221,74 @@ def test_spousal_nisa_transfer_is_capped_at_annual_management_limit(monkeypatch)
     row = _run(plan, rows, monkeypatch)
     assert row.spouse_nisa_transfer == pytest.approx(1_100_000)
     assert row.wife_nisa_contributed == pytest.approx(1_100_000)
+
+def test_husband_monthly_cash_goal_is_reserved_before_base_nisa(monkeypatch):
+    plan, rows = _plan(wife_income=0, household=0)
+    plan.wallets.initial_husband_cash = 1_000_000
+    plan.wallets.husband_minimum_cash = 1_000_000
+    plan.wallets.husband_target_cash = 2_000_000
+    plan.wallets.husband_monthly_saving_until_target = 50_000
+    husband = next(account for account in plan.nisa_accounts if account.owner == "husband")
+    husband.monthly_contribution = 500_000
+    husband.annual_limit = 100_000_000
+    husband.lifetime_limit = 100_000_000
+    rows[0].husband_gross = 4_200_000
+    rows[0].salary_net = 4_200_000
+    rows[0].total_income = 4_200_000
+    row = _run(plan, rows, monkeypatch)
+    assert row.husband_cash_end == pytest.approx(1_600_000)
+    assert row.husband_minimum_cash_breach_months == 0
+
+
+def test_husband_minimum_line_breach_is_reported(monkeypatch):
+    plan, rows = _plan(wife_income=0, household=600_000)
+    plan.wallets.initial_husband_cash = 1_000_000
+    plan.wallets.husband_minimum_cash = 1_000_000
+    plan.husband.annual_gross_income = 0
+    rows[0].husband_gross = 0
+    rows[0].salary_net = 0
+    rows[0].total_income = 0
+    row = _run(plan, rows, monkeypatch)
+    assert row.husband_cash_end == pytest.approx(400_000)
+    assert row.husband_minimum_cash_shortfall == pytest.approx(600_000)
+    assert row.husband_minimum_cash_breach_months == 12
+    assert any("最低維持預金" in warning for warning in row.warnings)
+
+
+def test_wife_target_cash_gates_automatic_extra_nisa(monkeypatch):
+    plan, rows = _plan(wife_income=1_200_000, household=0)
+    plan.wallets.initial_wife_cash = 2_900_000
+    plan.wallets.wife_personal_spending_monthly = 0
+    plan.wallets.wife_target_cash = 3_000_000
+    plan.wallets.auto_invest_enabled = True
+    plan.wallets.spouse_nisa_transfer_enabled = False
+    plan.wallets.husband_target_cash = 100_000_000
+    wife = next(account for account in plan.nisa_accounts if account.owner == "wife")
+    wife.monthly_contribution = 0
+    wife.annual_limit = 100_000_000
+    wife.lifetime_limit = 100_000_000
+    row = _run(plan, rows, monkeypatch)
+    assert row.wife_cash_end == pytest.approx(3_000_000)
+    assert row.wife_additional_nisa_contributed == pytest.approx(1_100_000)
+
+
+def test_nisa_cumulative_progress_and_milestone_events(monkeypatch):
+    plan, rows = _plan(wife_income=0, household=0, years=5)
+    plan.wallets.husband_minimum_cash = 0
+    plan.wallets.husband_target_cash = 0
+    plan.wallets.husband_monthly_saving_until_target = 0
+    husband = next(account for account in plan.nisa_accounts if account.owner == "husband")
+    husband.monthly_contribution = 300_000
+    monkeypatch.setattr(
+        policy_engine,
+        "HousingSimulationEngine",
+        lambda _plan: type("RawEngine", (), {"run": lambda self: rows})(),
+    )
+    results = SimulationEngine(plan).run()
+    assert results[0].husband_nisa_contributed == pytest.approx(3_600_000)
+    assert results[1].husband_nisa_cumulative_contributed == pytest.approx(7_200_000)
+    assert any("夫NISA 1/4" in event for event in results[1].events)
+    assert any("夫NISA 1/2" in event for event in results[2].events)
+    assert results[4].husband_nisa_cumulative_contributed == pytest.approx(18_000_000)
+    assert any("夫NISA 1/1" in event for event in results[4].events)
+

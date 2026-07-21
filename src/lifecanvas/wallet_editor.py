@@ -110,18 +110,20 @@ class WalletEditor(QGroupBox):
         self.wife_personal_spending = NumberEdit(0, "円/月")
         self.wife_contribution_threshold = NumberEdit(30_000, "円/月")
         self.wife_household_monthly = NumberEdit(100_000, "円/月")
+        self.wife_target_cash = NumberEdit(3_000_000)
         self.use_wife_cash = QCheckBox("収入不足時に妻の既存預金も家計へ使う")
         form.addRow("現在の預金", self.initial_wife_cash)
         form.addRow("個人支出", self.wife_personal_spending)
         form.addRow("家計拠出を始める余剰基準", self.wife_contribution_threshold)
         form.addRow("家計負担上限", self.wife_household_monthly)
+        form.addRow("妻の目標預金", self.wife_target_cash)
         form.addRow(self.use_wife_cash)
         return group
 
     def _build_investment_group(self) -> QGroupBox:
         group = QGroupBox("余剰投資")
         form = self._form(group)
-        self.auto_invest = QCheckBox("夫の目標預金を超えた余剰を夫NISAへ自動追加する")
+        self.auto_invest = QCheckBox("夫婦それぞれの目標預金を超えた余剰を本人NISAへ自動追加する")
         self.auto_extra_cap = NumberEdit(300_000, "円/月", maximum=300_000)
         self.spouse_transfer_enabled = QCheckBox("夫NISA満額後に妻NISAへ資金移転する")
         self.spouse_transfer_limit = NumberEdit(1_100_000, "円/年")
@@ -151,6 +153,7 @@ class WalletEditor(QGroupBox):
             self.wife_personal_spending,
             self.wife_contribution_threshold,
             self.wife_household_monthly,
+            self.wife_target_cash,
             self.auto_extra_cap,
             self.spouse_transfer_limit,
             self.other_transfers,
@@ -199,6 +202,7 @@ class WalletEditor(QGroupBox):
             self.husband_monthly_saving.set_value(wallet.husband_monthly_saving_until_target)
             self.wife_contribution_threshold.set_value(wallet.wife_contribution_threshold_monthly)
             self.wife_household_monthly.set_value(wallet.wife_household_monthly)
+            self.wife_target_cash.set_value(wallet.wife_target_cash)
             self.husband_household_monthly.set_value(wallet.husband_household_monthly)
             self.husband_child_increment.set_value(
                 wallet.husband_child_household_increment_monthly
@@ -235,6 +239,7 @@ class WalletEditor(QGroupBox):
             wife_personal_spending_monthly=self.wife_personal_spending.value(),
             wife_contribution_threshold_monthly=self.wife_contribution_threshold.value(),
             wife_use_existing_cash_for_household=self.use_wife_cash.isChecked(),
+            wife_target_cash=self.wife_target_cash.value(),
             husband_minimum_cash=self.husband_minimum_cash.value(),
             husband_target_cash=self.husband_target_cash.value(),
             husband_monthly_saving_until_target=self.husband_monthly_saving.value(),

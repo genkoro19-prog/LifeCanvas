@@ -33,6 +33,28 @@ from .ui import MetricCard, man
 from .wallet_editor import WalletEditor
 from .wallet_engine import SimulationEngine, recommend_monthly_contributions
 
+
+def _nisa_limit(plan, owner: str) -> float:
+    return next(
+        (account.lifetime_limit for account in plan.nisa_accounts if account.owner == owner),
+        0.0,
+    )
+
+
+def _nisa_progress_text(cumulative: float, lifetime_limit: float) -> str:
+    if lifetime_limit <= 0:
+        return "-"
+    ratio = max(0.0, min(1.0, cumulative / lifetime_limit))
+    milestone = "1/1" if ratio >= 1 else "1/2" if ratio >= 0.5 else "1/4" if ratio >= 0.25 else ""
+    return f"{milestone + ' ' if milestone else ''}{ratio*100:.0f}%"
+
+
+def _nisa_reached_year(results, attribute: str, lifetime_limit: float, ratio: float) -> str:
+    threshold = lifetime_limit * ratio
+    row = next((item for item in results if getattr(item, attribute, 0.0) + 1 >= threshold), None)
+    return f"{row.calendar_year}年" if row else "期間内未到達"
+
+
 # Keep all inherited calculation and export paths on the revised implementations.
 complete_ui_module.SimulationEngine = SimulationEngine
 final_ui_module.SimulationEngine = SimulationEngine
@@ -336,9 +358,16 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
             "夫預金増減",
             "妻預金増減",
             "夫預金",
+            "夫最低ライン",
             "妻預金",
-            "夫NISA",
-            "妻NISA",
+            "夫NISA年額",
+            "夫NISA累計",
+            "夫NISA進捗",
+            "夫NISA評価",
+            "妻NISA年額",
+            "妻NISA累計",
+            "妻NISA進捗",
+            "妻NISA評価",
             "投資合計",
             "純資産",
         ]
@@ -350,7 +379,16 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
     def _refresh_table(self) -> None:
         self.year_table.setRowCount(len(self.results))
         separate = self.plan.wallets.mode == "separate"
+        husband_limit = _nisa_limit(self.plan, "husband")
+        wife_limit = _nisa_limit(self.plan, "wife")
         for row_index, result in enumerate(self.results):
+            if result.husband_minimum_cash_breach_months:
+                minimum_status = (
+                    f"▲{man(result.husband_minimum_cash_shortfall)} "
+                    f"({result.husband_minimum_cash_breach_months}月)"
+                )
+            else:
+                minimum_status = "OK"
             if separate:
                 values = [
                     str(result.calendar_year),
@@ -367,8 +405,15 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
                     man(result.husband_savings_change),
                     man(result.wife_savings_change),
                     man(result.husband_cash_end),
+                    minimum_status,
                     man(result.wife_cash_end),
+                    man(result.husband_nisa_contributed),
+                    man(result.husband_nisa_cumulative_contributed),
+                    _nisa_progress_text(result.husband_nisa_cumulative_contributed, husband_limit),
                     man(result.husband_nisa_market_value),
+                    man(result.wife_nisa_contributed),
+                    man(result.wife_nisa_cumulative_contributed),
+                    _nisa_progress_text(result.wife_nisa_cumulative_contributed, wife_limit),
                     man(result.wife_nisa_market_value),
                     man(result.investments_market_value),
                     man(result.net_worth),
@@ -381,17 +426,15 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
                     man(result.wife_gross),
                     man(result.benefits),
                     man(result.consumption_total),
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                    "-",
+                    "-", "-", "-", "-", "-", "-", "-",
                     man(result.cash_end),
                     "-",
-                    man(result.investments_market_value),
                     "-",
+                    man(result.nisa_contributed),
+                    man(result.investments_book_value),
+                    "-",
+                    man(result.investments_market_value),
+                    "-", "-", "-", "-",
                     man(result.investments_market_value),
                     man(result.net_worth),
                 ]
@@ -441,6 +484,15 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
                 + f"妻預金 {man(final.wife_cash_end)} / "
                 + f"夫NISA {man(final.husband_nisa_market_value)} / "
                 + f"妻NISA {man(final.wife_nisa_market_value)}"
+                + "\n【NISA買付元本と到達年】\n"
+                + f"夫 累計{man(final.husband_nisa_cumulative_contributed)} / "
+                + f"1/4 {_nisa_reached_year(self.results, 'husband_nisa_cumulative_contributed', _nisa_limit(self.plan, 'husband'), 0.25)} / "
+                + f"1/2 {_nisa_reached_year(self.results, 'husband_nisa_cumulative_contributed', _nisa_limit(self.plan, 'husband'), 0.5)} / "
+                + f"1/1 {_nisa_reached_year(self.results, 'husband_nisa_cumulative_contributed', _nisa_limit(self.plan, 'husband'), 1.0)}\n"
+                + f"妻 累計{man(final.wife_nisa_cumulative_contributed)} / "
+                + f"1/4 {_nisa_reached_year(self.results, 'wife_nisa_cumulative_contributed', _nisa_limit(self.plan, 'wife'), 0.25)} / "
+                + f"1/2 {_nisa_reached_year(self.results, 'wife_nisa_cumulative_contributed', _nisa_limit(self.plan, 'wife'), 0.5)} / "
+                + f"1/1 {_nisa_reached_year(self.results, 'wife_nisa_cumulative_contributed', _nisa_limit(self.plan, 'wife'), 1.0)}"
             )
             self.dashboard_summary.setPlainText(wallet_text)
 
