@@ -96,10 +96,36 @@ class CompletionAuditController:
             _safe_disconnect(guided.applyRequested)
             guided.applyRequested.connect(window._apply_guided_input)
 
+        detailed = getattr(window, "detailed_settings", None)
+        detail_button = getattr(detailed, "recalculate_button", None)
+        if isinstance(detail_button, QPushButton):
+            _safe_disconnect(detail_button.clicked)
+            detail_button.clicked.connect(
+                lambda _checked=False: self._run_detailed_recalculation()
+            )
+
         for button in window.findChildren(QPushButton):
+            if button is detail_button:
+                continue
             if button.objectName() == "pdfButton" or button.text() == "PDFレポート":
                 _safe_disconnect(button.clicked)
                 button.clicked.connect(lambda _checked=False, w=window: w.export_report())
+            elif button is getattr(window, "recalc_button", None) or button.text() in (
+                "未来を更新",
+                "再計算",
+            ):
+                _safe_disconnect(button.clicked)
+                button.clicked.connect(lambda _checked=False, w=window: w.recalculate())
+
+    def _run_detailed_recalculation(self) -> None:
+        detailed = getattr(self.window, "detailed_settings", None)
+        if detailed is not None:
+            detailed.status.setText("再計算しています…")
+        if self.window.recalculate():
+            if detailed is not None:
+                detailed.status.setText("反映済み")
+        elif detailed is not None:
+            detailed.status.setText("入力エラー")
 
     def _schedule_refresh(self, window, *_args) -> None:
         if self._syncing or self._guided_applying:
