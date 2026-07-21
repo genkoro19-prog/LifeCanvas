@@ -75,7 +75,7 @@ jobs:
           assert window.guided_input.apply_button.text() == "この内容で人生プランを計算"
           assert window.guided_input.review_list.count() >= 1
           assert window.compact_timeline.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
-          assert window.year_table.columnCount() == 19
+          assert window.year_table.columnCount() == 26
           assert window.compare_table.rowCount() == 3
           assert window.child_editor.table.rowCount() >= 1
           assert window.housing_editor.mode.findData("rent") >= 0
