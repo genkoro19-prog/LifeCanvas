@@ -17,7 +17,6 @@ from .models import SocialInsuranceMode
 from .tax import estimate_net_salary
 from .ui import man
 from .wheel_guard import install_input_wheel_guard
-from .interaction_sync import install_detailed_settings_interaction_sync
 
 
 class LifeCanvasWindow(BaseLifeCanvasWindow):
@@ -41,7 +40,6 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
             legacy_layout = legacy_detail.widget().layout()
             self.personal_debt_editor = PersonalDebtEditor(self.plan)
             legacy_layout.insertWidget(max(0, legacy_layout.count() - 1), self.personal_debt_editor)
-            self.personal_debt_editor.changed.connect(self._schedule_refresh)
 
         self._tag_detailed_settings_categories()
         self.detailed_settings = DetailedSettingsPage(legacy_detail)
@@ -72,10 +70,25 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
                 self.tabs.setTabText(index, label)
         self.tabs.setCurrentIndex(1)
         self._refresh_guided_policy_preview()
+        self._connect_all_editor_refresh_signals()
         self._input_wheel_guard = install_input_wheel_guard(self)
-        self._detail_interaction_sync = install_detailed_settings_interaction_sync(
-            self, self.detailed_settings
+
+    def _connect_all_editor_refresh_signals(self) -> None:
+        """Connect every composite editor that owns dynamically-created controls."""
+        editors = (
+            getattr(self, "child_editor", None),
+            getattr(self, "housing_editor", None),
+            getattr(self, "car_editor", None),
+            getattr(self, "cashflow_event_editor", None),
+            getattr(self, "husband_age_income", None),
+            getattr(self, "wife_age_income", None),
+            getattr(self, "wallet_editor", None),
+            self.personal_debt_editor,
         )
+        for editor in editors:
+            changed = getattr(editor, "changed", None)
+            if changed is not None:
+                changed.connect(self._schedule_refresh)
 
     def _tag_detailed_settings_categories(self) -> None:
         def parent_of(name: str):
