@@ -1,3 +1,3 @@
-def pytest_sessionstart(session):
-    session.config.option.maxfail = 1
-    session.config.option.verbose = 2
+def pytest_configure(config):
+    config.option.maxfail = 1
+    config.option.verbose = 2
