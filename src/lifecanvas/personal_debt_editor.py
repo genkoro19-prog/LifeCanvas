@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QTableWidget,
@@ -26,21 +27,12 @@ from .widgets import NumberEdit
 
 
 BORROWERS = (("夫", "husband"), ("妻", "wife"), ("家計", "household"))
-PAYMENT_SOURCES = (
-    ("本人", "borrower"),
-    ("配偶者", "spouse"),
-    ("家計", "household"),
-    ("不足表示", "unmet"),
-)
-REPAYMENT_METHODS = (
-    ("月額固定", "fixed"),
-    ("元利均等", "equal_payment"),
-    ("元金均等", "equal_principal"),
-)
+PAYMENT_SOURCES = (("本人・家計口座", "borrower"), ("配偶者", "spouse"))
+REPAYMENT_METHODS = (("月額固定", "fixed"),)
 
 
 class PersonalDebtDetailDialog(QDialog):
-    """Detailed debt assumptions kept out of the compact quick-entry table."""
+    """Detailed assumptions for a fixed monthly personal debt."""
 
     def __init__(self, debt: PersonalDebt, parent: QWidget | None = None):
         super().__init__(parent)
@@ -48,7 +40,8 @@ class PersonalDebtDetailDialog(QDialog):
         self.setMinimumWidth(520)
         root = QVBoxLayout(self)
         note = QLabel(
-            "元金や金利が不明な場合は、月額と残り期間だけで固定支出として計算します。"
+            "現在は月額固定方式で計算します。元金や金利が不明な場合は、"
+            "月額と残り期間だけで固定支出として扱います。"
         )
         note.setWordWrap(True)
         note.setStyleSheet("color:#667085;")
@@ -64,7 +57,6 @@ class PersonalDebtDetailDialog(QDialog):
         self.method = QComboBox()
         for label, value in REPAYMENT_METHODS:
             self.method.addItem(label, value)
-        self.method.setCurrentIndex(max(0, self.method.findData(debt.repayment_method)))
         self.source = QComboBox()
         for label, value in PAYMENT_SOURCES:
             self.source.addItem(label, value)
@@ -77,7 +69,7 @@ class PersonalDebtDetailDialog(QDialog):
         form.addRow("返済開始", self.start_months)
         form.addRow("ボーナス返済", self.bonus)
         form.addRow("返済方式", self.method)
-        form.addRow("本人資金不足時", self.source)
+        form.addRow("支払元", self.source)
         form.addRow("備考", self.notes)
         root.addLayout(form)
 
@@ -87,22 +79,24 @@ class PersonalDebtDetailDialog(QDialog):
         root.addWidget(buttons)
 
     def apply_to(self, debt: PersonalDebt) -> PersonalDebt:
-        return debt.model_copy(
-            update={
+        data = debt.model_dump(mode="python")
+        data.update(
+            {
                 "current_balance": self.current_balance.value(),
                 "principal": self.principal.value(),
                 "annual_interest_rate": self.interest.value(),
                 "start_offset_months": self.start_months.int_value(),
                 "bonus_payment": self.bonus.value(),
-                "repayment_method": self.method.currentData(),
+                "repayment_method": "fixed",
                 "payment_source": self.source.currentData(),
                 "notes": self.notes.toPlainText().strip(),
             }
         )
+        return PersonalDebt.model_validate(data)
 
 
 class PersonalDebtEditor(QGroupBox):
-    """Quick debt entry with an optional detailed editor."""
+    """Quick debt entry with strict validation and an optional detailed editor."""
 
     changed = Signal()
     COLUMNS = ("借入名", "借入者", "月額", "残り年数", "支払元")
@@ -174,11 +168,14 @@ class PersonalDebtEditor(QGroupBox):
         self.table.setItem(row, 2, QTableWidgetItem(f"{debt.monthly_payment:.0f}"))
         years = debt.remaining_months / 12 if debt.remaining_months else 0
         self.table.setItem(row, 3, QTableWidgetItem(f"{years:g}"))
-        self.table.setCellWidget(row, 4, self._combo(PAYMENT_SOURCES, debt.payment_source))
+        source_value = debt.payment_source if debt.payment_source in {"borrower", "spouse"} else "borrower"
+        self.table.setCellWidget(row, 4, self._combo(PAYMENT_SOURCES, source_value))
         self._emit_changed()
 
     def remove_selected(self) -> None:
         rows = sorted({index.row() for index in self.table.selectedIndexes()}, reverse=True)
+        if not rows and self.table.currentRow() >= 0:
+            rows = [self.table.currentRow()]
         for row in rows:
             self.table.removeRow(row)
         if rows:
@@ -187,14 +184,21 @@ class PersonalDebtEditor(QGroupBox):
     def edit_selected(self) -> None:
         row = self.table.currentRow()
         if row < 0:
+            QMessageBox.information(self, "借入の詳細設定", "詳細設定する行を選択してください。")
             return
-        debt = self._debt_for_row(row)
-        if debt is None:
+        try:
+            debt = self._debt_for_row(row)
+        except ValueError as exc:
+            QMessageBox.warning(self, "借入内容を確認してください", str(exc))
             return
         dialog = PersonalDebtDetailDialog(debt, self)
         if dialog.exec() != QDialog.Accepted:
             return
-        updated = dialog.apply_to(debt)
+        try:
+            updated = dialog.apply_to(debt)
+        except ValueError as exc:
+            QMessageBox.warning(self, "借入内容を確認してください", str(exc))
+            return
         name_item = self.table.item(row, 0)
         if name_item is not None:
             name_item.setData(self.DETAIL_ROLE, updated.model_dump(mode="json"))
@@ -204,23 +208,30 @@ class PersonalDebtEditor(QGroupBox):
         self._emit_changed()
 
     @staticmethod
-    def _number(text: str, default: float = 0.0) -> float:
+    def _number(text: str, label: str, row: int) -> float:
+        normalized = (text or "").replace(",", "").strip()
+        if not normalized:
+            raise ValueError(f"借入{row + 1}行目の{label}を入力してください。")
         try:
-            return float(text.replace(",", "").strip())
-        except (AttributeError, ValueError):
-            return default
+            return float(normalized)
+        except ValueError as exc:
+            raise ValueError(f"借入{row + 1}行目の{label}は数字で入力してください。") from exc
 
-    def _debt_for_row(self, row: int) -> PersonalDebt | None:
+    def _debt_for_row(self, row: int) -> PersonalDebt:
         name_item = self.table.item(row, 0)
         monthly_item = self.table.item(row, 2)
         years_item = self.table.item(row, 3)
         borrower = self.table.cellWidget(row, 1)
         source = self.table.cellWidget(row, 4)
-        name = name_item.text().strip() if name_item else "個人借入"
-        monthly = self._number(monthly_item.text() if monthly_item else "")
-        years = self._number(years_item.text() if years_item else "")
-        if monthly <= 0 or years <= 0:
-            return None
+        name = name_item.text().strip() if name_item else ""
+        if not name:
+            raise ValueError(f"借入{row + 1}行目の借入名を入力してください。")
+        monthly = self._number(monthly_item.text() if monthly_item else "", "月額", row)
+        years = self._number(years_item.text() if years_item else "", "残り年数", row)
+        if monthly <= 0:
+            raise ValueError(f"{name}の月額は0円より大きくしてください。")
+        if years <= 0:
+            raise ValueError(f"{name}の残り年数は0年より大きくしてください。")
         stored = name_item.data(self.DETAIL_ROLE) if name_item else None
         data = dict(stored) if isinstance(stored, dict) else {}
         data.update(
@@ -228,26 +239,20 @@ class PersonalDebtEditor(QGroupBox):
                 "debt_id": str(name_item.data(Qt.UserRole))
                 if name_item and name_item.data(Qt.UserRole)
                 else uuid4().hex,
-                "name": name or "個人借入",
-                "borrower": borrower.currentData()
-                if isinstance(borrower, QComboBox)
-                else "household",
+                "name": name,
+                "borrower": borrower.currentData() if isinstance(borrower, QComboBox) else "household",
                 "monthly_payment": monthly,
                 "remaining_months": max(1, int(round(years * 12))),
+                "repayment_method": "fixed",
                 "payment_source": source.currentData()
                 if isinstance(source, QComboBox)
-                else data.get("payment_source", "borrower"),
+                else "borrower",
             }
         )
         return PersonalDebt.model_validate(data)
 
     def debts(self) -> list[PersonalDebt]:
-        debts: list[PersonalDebt] = []
-        for row in range(self.table.rowCount()):
-            debt = self._debt_for_row(row)
-            if debt is not None:
-                debts.append(debt)
-        return debts
+        return [self._debt_for_row(row) for row in range(self.table.rowCount())]
 
     def load(self, plan: ProjectPlan) -> None:
         self._loading = True
