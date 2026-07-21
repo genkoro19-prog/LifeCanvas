@@ -9,6 +9,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .policy_audit import install_policy_audit
+
+# GuidedUI imports this module before constructing the window, so the audited
+# debt lifecycle is active for the very first dashboard calculation.
+install_policy_audit()
+
 
 class InputWheelGuard(QObject):
     """Prevent wheel changes on selectors while preserving page scrolling."""
