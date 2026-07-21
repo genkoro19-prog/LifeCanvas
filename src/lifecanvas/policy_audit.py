@@ -103,12 +103,16 @@ def install_policy_audit() -> None:
         finally:
             _RUNTIME_COLLECTOR = None
 
-        if not collector or not results:
+        if not results:
             return results
 
         elapsed_months = 0
         last_liability = 0.0
         for row in results:
+            # Keep the year-table label honest: this field means unpaid household
+            # spending, not the amount the husband successfully covered.
+            row.household_shortfall = row.household_unmet
+
             elapsed_months += max(1, row.months)
             last_liability = sum(
                 runtime.liability_at(elapsed_months - 1) for runtime in collector
