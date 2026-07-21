@@ -268,8 +268,14 @@ def test_wife_target_cash_gates_automatic_extra_nisa(monkeypatch):
     wife.annual_limit = 100_000_000
     wife.lifetime_limit = 100_000_000
     row = _run(plan, rows, monkeypatch)
-    assert row.wife_cash_end == pytest.approx(3_000_000)
-    assert row.wife_additional_nisa_contributed == pytest.approx(1_100_000)
+    assert row.wife_cash_end == pytest.approx(plan.wallets.wife_target_cash)
+    expected_extra = (
+        plan.wallets.initial_wife_cash
+        + row.wife_personal_income
+        - row.wife_personal_spending
+        - plan.wallets.wife_target_cash
+    )
+    assert row.wife_additional_nisa_contributed == pytest.approx(expected_extra)
 
 
 def test_nisa_cumulative_progress_and_milestone_events(monkeypatch):
