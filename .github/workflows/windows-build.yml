@@ -3,7 +3,7 @@ name: windows-build
 on:
   pull_request:
   push:
-    branches: [main, agent/full-debug-and-pdf-chart]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
