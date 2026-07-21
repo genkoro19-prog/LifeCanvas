@@ -41,8 +41,6 @@ def test_dynamic_editor_button_schedules_refresh():
     app = _app()
     window = LifeCanvasWindow()
     try:
-        window.show()
-        _process(app)
         calls = []
         original = window._schedule_refresh
 
@@ -56,6 +54,7 @@ def test_dynamic_editor_button_schedules_refresh():
             for button in window.detailed_settings.findChildren(QPushButton)
             if "追加" in button.text() and button.isEnabled()
         )
+        # Send a real mouse release without showing the full top-level window.
         QTest.mouseClick(button, Qt.LeftButton)
         _process(app)
         assert calls, f"{button.text()} did not schedule recalculation"
