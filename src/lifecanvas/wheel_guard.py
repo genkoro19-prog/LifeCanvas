@@ -55,4 +55,11 @@ def install_input_wheel_guard(root: QWidget | QApplication) -> InputWheelGuard:
         targets.extend(container.findChildren(QComboBox))
         for target in targets:
             target.installEventFilter(guard)
+
+        # GuidedUI calls this installer after all tabs and editors exist. Hook the
+        # completion audit here so the audit remains independent of constructor order.
+        if hasattr(container, "guided_input") and hasattr(container, "detailed_settings"):
+            from .completion_audit import install_completion_audit
+
+            install_completion_audit(container)
     return guard
