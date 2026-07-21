@@ -9,11 +9,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .legacy_sync_guard import install_legacy_sync_guard
 from .policy_audit import install_policy_audit
 
-# GuidedUI imports this module before constructing the window, so the audited
-# debt lifecycle is active for the very first dashboard calculation.
+# GuidedUI imports this module before constructing the window, so audited
+# calculation behavior and legacy-plan compatibility are active from the first
+# dashboard calculation.
 install_policy_audit()
+install_legacy_sync_guard()
 
 
 class InputWheelGuard(QObject):
