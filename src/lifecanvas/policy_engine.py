@@ -533,7 +533,8 @@ def _is_safe(plan: ProjectPlan, owner: str) -> bool:
         floor = plan.wallets.husband_minimum_cash
         values = [row.husband_cash_end for row in results]
     else:
-        floor = plan.wallets.wife_target_cash
+        # Wife target cash is the threshold for optional extra investment, not a hard minimum.
+        floor = 0.0
         values = [row.wife_cash_end for row in results]
     return min(values) >= floor and not any(row.unmet_amount > 1 for row in results)
 
