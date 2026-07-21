@@ -69,6 +69,14 @@ def _chart_png_bytes(results: list[YearResult], separate: bool = False) -> bytes
     return buffer.getvalue()
 
 
+def _chart_data_uri(results: list[YearResult], separate: bool = False) -> str:
+    """Backward-compatible data URI helper used by existing chart dimension tests."""
+    import base64
+
+    raw = _chart_png_bytes(results, separate)
+    return "data:image/png;base64," + base64.b64encode(raw).decode("ascii")
+
+
 def _event_rows(results: list[YearResult]) -> str:
     rows: list[str] = []
     for result in results:
