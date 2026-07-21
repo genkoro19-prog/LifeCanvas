@@ -30,6 +30,15 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path "dist/LifeCanvas/LifeCanvas.exe")) { throw "LifeCanvas.exe was not created" }
+      - name: Smoke launch packaged executable
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath "dist/LifeCanvas/LifeCanvas.exe" -PassThru
+          Start-Sleep -Seconds 8
+          if ($process.HasExited) {
+            throw "LifeCanvas.exe exited during startup smoke test (exit code $($process.ExitCode))"
+          }
+          Stop-Process -Id $process.Id -Force
       - name: Create portable ZIP
         shell: pwsh
         run: Compress-Archive -Path dist/LifeCanvas/* -DestinationPath LifeCanvas-Windows.zip
