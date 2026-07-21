@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from types import MethodType
 
-from PySide6.QtWidgets import QComboBox, QLineEdit, QPushButton, QWidget
+from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QCheckBox,
+    QComboBox,
+    QLineEdit,
+    QPushButton,
+    QWidget,
+)
 
 
 def _safe_disconnect(signal, slot=None) -> None:
@@ -52,19 +59,41 @@ class CompletionAuditController:
                 current = current.parentWidget()
             return False
 
+        # Text and combo inputs were already partly wired by older UI layers.
+        # Reconnect every non-guided control to one audited refresh path.
         for edit in window.findChildren(QLineEdit):
             if guided is not None and inside(edit, guided):
                 continue
             _safe_disconnect(edit.editingFinished, old_schedule)
+            _safe_disconnect(edit.editingFinished, new_schedule)
             edit.editingFinished.connect(new_schedule)
+
         for combo in window.findChildren(QComboBox):
             if guided is not None and inside(combo, guided):
                 continue
             if combo.objectName() == "sampleSelector":
                 _safe_disconnect(combo.currentIndexChanged, old_schedule)
+                _safe_disconnect(combo.currentIndexChanged, new_schedule)
                 continue
             _safe_disconnect(combo.currentIndexChanged, old_schedule)
+            _safe_disconnect(combo.currentIndexChanged, new_schedule)
             combo.currentIndexChanged.connect(new_schedule)
+
+        # This was the main missing path: most money, age, rate and year fields
+        # are spin boxes rather than QLineEdit widgets.
+        for spin in window.findChildren(QAbstractSpinBox):
+            if guided is not None and inside(spin, guided):
+                continue
+            _safe_disconnect(spin.editingFinished, old_schedule)
+            _safe_disconnect(spin.editingFinished, new_schedule)
+            spin.editingFinished.connect(new_schedule)
+
+        for checkbox in window.findChildren(QCheckBox):
+            if guided is not None and inside(checkbox, guided):
+                continue
+            _safe_disconnect(checkbox.toggled, old_schedule)
+            _safe_disconnect(checkbox.toggled, new_schedule)
+            checkbox.toggled.connect(new_schedule)
 
         editors = (
             getattr(window, "child_editor", None),
@@ -200,6 +229,7 @@ class CompletionAuditController:
         return True
 
     def _export_report(self, window) -> None:
+        # Always apply current controls before generating the report.
         if not window.recalculate():
             return
         self.original_export_report()
