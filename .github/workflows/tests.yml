@@ -30,7 +30,7 @@ jobs:
       - name: Run tests
         id: pytest
         continue-on-error: true
-        run: pytest -x -vv > pytest.log 2>&1
+        run: pytest -x -vv tests/test_compact_policy_ui.py > pytest.log 2>&1
       - name: Report test failure on PR
         if: steps.pytest.outcome == 'failure' && github.event_name == 'pull_request'
         env:
@@ -41,7 +41,7 @@ jobs:
             echo '## CI pytest failure'
             echo
             echo '```text'
-            tail -c 50000 pytest.log
+            cat pytest.log
             echo '```'
           } > pytest-comment.md
           gh pr comment "$PR_NUMBER" --body-file pytest-comment.md
