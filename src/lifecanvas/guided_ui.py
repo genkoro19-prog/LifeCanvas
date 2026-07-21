@@ -17,6 +17,7 @@ from .models import SocialInsuranceMode
 from .tax import estimate_net_salary
 from .ui import man
 from .wheel_guard import install_input_wheel_guard
+from .interaction_sync import install_detailed_settings_interaction_sync
 
 
 class LifeCanvasWindow(BaseLifeCanvasWindow):
@@ -72,6 +73,9 @@ class LifeCanvasWindow(BaseLifeCanvasWindow):
         self.tabs.setCurrentIndex(1)
         self._refresh_guided_policy_preview()
         self._input_wheel_guard = install_input_wheel_guard(self)
+        self._detail_interaction_sync = install_detailed_settings_interaction_sync(
+            self, self.detailed_settings
+        )
 
     def _tag_detailed_settings_categories(self) -> None:
         def parent_of(name: str):

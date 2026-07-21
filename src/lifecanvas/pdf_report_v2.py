@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import base64
 from html import escape
 from io import BytesIO
 from pathlib import Path
 
 from matplotlib.figure import Figure
-from PySide6.QtCore import QMarginsF, QSizeF
-from PySide6.QtGui import QPageLayout, QPageSize, QPdfWriter, QTextDocument
+from PySide6.QtCore import QMarginsF, QSizeF, QUrl
+from PySide6.QtGui import QImage, QPageLayout, QPageSize, QPdfWriter, QTextDocument
 
 from .insights import analyze_plan, dominant_expense
 from .models import ProjectPlan, YearResult
@@ -19,7 +18,7 @@ def _man(value: float) -> str:
     return f"{value / 10_000:,.0f}万円"
 
 
-def _chart_data_uri(results: list[YearResult], separate: bool = False) -> str:
+def _chart_png_bytes(results: list[YearResult], separate: bool = False) -> bytes:
     """Render a fixed-aspect chart that fits safely inside an A4 content area."""
 
     configure_japanese_matplotlib()
@@ -67,7 +66,7 @@ def _chart_data_uri(results: list[YearResult], separate: bool = False) -> str:
 
     buffer = BytesIO()
     figure.savefig(buffer, format="png", facecolor="white")
-    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+    return buffer.getvalue()
 
 
 def _event_rows(results: list[YearResult]) -> str:
@@ -177,7 +176,7 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
     )
     children = "、".join(child.name for child in plan.children) or "なし"
     cars = "、".join(car.name for car in plan.cars if car.enabled) or "なし"
-    chart = _chart_data_uri(results, separate)
+    chart_png = _chart_png_bytes(results, separate)
     final = results[-1]
     current_cash = (
         f"夫 {_man(plan.wallets.initial_husband_cash)}／妻 {_man(plan.wallets.initial_wife_cash)}"
@@ -231,7 +230,7 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
     <div class='pagebreak'></div>
     <div class='chart-section'>
       <h2>資産推移</h2>
-      <img class='chart' src='{chart}' />
+      <img class='chart' src='lifecanvas-chart.png' />
     </div>
 
     <h2>確認しておきたい年</h2>
@@ -264,6 +263,14 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
     document = QTextDocument()
     document.setDocumentMargin(0)
     document.setPageSize(QSizeF(writer.width(), writer.height()))
+    chart_image = QImage.fromData(chart_png, b'PNG')
+    if chart_image.isNull():
+        raise ValueError('PDF用グラフ画像を生成できませんでした。')
+    document.addResource(
+        QTextDocument.ImageResource,
+        QUrl('lifecanvas-chart.png'),
+        chart_image,
+    )
     document.setHtml(html)
     document.print_(writer)
     return target

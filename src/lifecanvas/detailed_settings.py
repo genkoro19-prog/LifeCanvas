@@ -67,15 +67,15 @@ class DetailedSettingsPage(QWidget):
         toolbar = QHBoxLayout()
         title = QLabel("詳細設定")
         title.setStyleSheet("font-size:16px; font-weight:700;")
-        status = QLabel("変更内容は自動計算されます")
-        status.setStyleSheet("color:#667085;")
+        self.status = QLabel("変更内容は自動計算されます")
+        self.status.setStyleSheet("color:#667085;")
         self.recalculate_button = QPushButton("設定を反映して再計算")
         self.recalculate_button.setObjectName("primaryButton")
         self.recalculate_button.clicked.connect(
             lambda _checked=False: self._request_recalculation()
         )
         toolbar.addWidget(title)
-        toolbar.addWidget(status)
+        toolbar.addWidget(self.status)
         toolbar.addStretch()
         toolbar.addWidget(self.recalculate_button)
         root.addLayout(toolbar)
@@ -171,11 +171,13 @@ class DetailedSettingsPage(QWidget):
         legacy_scroll.deleteLater()
 
     def _request_recalculation(self) -> None:
+        self.status.setText("再計算しています…")
         self.recalculateRequested.emit()
         top_level = self.window()
         recalculate = getattr(top_level, "recalculate", None)
         if callable(recalculate):
             recalculate()
+        self.status.setText("反映済み")
 
     @staticmethod
     def _take_widgets(scroll: QScrollArea) -> list[QWidget]:
