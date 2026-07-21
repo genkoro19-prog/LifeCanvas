@@ -40,6 +40,14 @@ jobs:
               exit 1
             fi
           done
+      - name: Upload pytest diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-diagnostic-${{ github.run_id }}
+          path: pytest.log
+          if-no-files-found: error
+          retention-days: 7
       - name: Report test failure on PR
         if: steps.pytest.outcome == 'failure' && github.event_name == 'pull_request'
         env:
