@@ -271,12 +271,12 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
     document = QTextDocument()
     document.setDocumentMargin(0)
     document.setPageSize(QSizeF(writer.width(), writer.height()))
-    chart_image = QImage.fromData(chart_png, b'PNG')
+    chart_image = QImage.fromData(chart_png)
     if chart_image.isNull():
-        raise ValueError('PDF用グラフ画像を生成できませんでした。')
+        raise ValueError("PDF用グラフ画像を生成できませんでした。")
     document.addResource(
         QTextDocument.ImageResource,
-        QUrl('lifecanvas-chart.png'),
+        QUrl("lifecanvas-chart.png"),
         chart_image,
     )
     document.setHtml(html)
