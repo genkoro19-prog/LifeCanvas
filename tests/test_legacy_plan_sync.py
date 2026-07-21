@@ -2,7 +2,6 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import pytest
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QApplication
 
@@ -21,21 +20,19 @@ def _close(app, window):
     app.processEvents()
 
 
-@pytest.mark.parametrize(
-    "children",
-    [
-        [],
-        [ChildPlan(name="第一子", birth_offset=4)],
-    ],
-)
-def test_zero_or_one_child_plan_syncs_without_changing_plan(children):
+def test_zero_or_one_child_plan_syncs_without_changing_plan():
     app = _app()
     window = LifeCanvasWindow()
     try:
-        window.plan.children = [child.model_copy(deep=True) for child in children]
-        window._sync_inputs_from_plan()
+        cases = [
+            [],
+            [ChildPlan(name="第一子", birth_offset=4)],
+        ]
+        for children in cases:
+            window.plan.children = [child.model_copy(deep=True) for child in children]
+            window._sync_inputs_from_plan()
 
-        assert window.plan.children == children
-        assert window.child_editor.table.rowCount() == len(children)
+            assert window.plan.children == children
+            assert window.child_editor.table.rowCount() == len(children)
     finally:
         _close(app, window)
