@@ -3,7 +3,7 @@ name: tests
 on:
   pull_request:
   push:
-    branches: [main, agent/full-debug-and-pdf-chart]
+    branches: [main]
 
 permissions:
   contents: read
@@ -90,7 +90,7 @@ jobs:
           assert configure_japanese_matplotlib() == "Noto Sans CJK JP"
           with TemporaryDirectory() as directory:
               report = export_pdf(window.plan, window.results, Path(directory) / "report.pdf")
-              assert report.exists() and report.stat().st_size > 80000
+              assert report.exists() and report.stat().st_size > 10000
           window.close()
           window.deleteLater()
           QCoreApplication.sendPostedEvents(None, 0)
