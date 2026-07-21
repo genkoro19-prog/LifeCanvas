@@ -257,6 +257,4 @@ def install_completion_audit(window) -> CompletionAuditController:
         return existing
     controller = CompletionAuditController(window)
     window._completion_audit_controller = controller
-    # The first dashboard was calculated before the audit was installed.
-    window.recalculate()
     return controller
