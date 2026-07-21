@@ -19,6 +19,9 @@ class CompletionAuditController:
     """Stabilize recalculation, export, and cross-page synchronization."""
 
     def __init__(self, window):
+        from .policy_audit import install_policy_audit
+
+        install_policy_audit()
         self.window = window
         self.original_schedule_refresh = window._schedule_refresh
         self.original_recalculate = window.recalculate
@@ -198,4 +201,6 @@ def install_completion_audit(window) -> CompletionAuditController:
         return existing
     controller = CompletionAuditController(window)
     window._completion_audit_controller = controller
+    # The first dashboard was calculated before the audit was installed.
+    window.recalculate()
     return controller
