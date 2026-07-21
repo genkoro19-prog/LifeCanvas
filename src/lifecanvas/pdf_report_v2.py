@@ -6,12 +6,33 @@ from pathlib import Path
 
 from matplotlib.figure import Figure
 from PySide6.QtCore import QMarginsF, QSizeF, QUrl
-from PySide6.QtGui import QImage, QPageLayout, QPageSize, QPdfWriter, QTextDocument
+from PySide6.QtGui import (
+    QGuiApplication,
+    QImage,
+    QPageLayout,
+    QPageSize,
+    QPdfWriter,
+    QTextDocument,
+)
 
 from .insights import analyze_plan, dominant_expense
 from .models import ProjectPlan, YearResult
 from .plotting import configure_japanese_matplotlib
 from .rent_engine import is_rental_move
+
+
+_PDF_QT_APP: QGuiApplication | None = None
+
+
+def _ensure_qt_application() -> QGuiApplication:
+    """Keep a Qt GUI application alive for headless/standalone PDF calls."""
+
+    global _PDF_QT_APP
+    existing = QGuiApplication.instance()
+    if existing is not None:
+        return existing
+    _PDF_QT_APP = QGuiApplication([])
+    return _PDF_QT_APP
 
 
 def _man(value: float) -> str:
@@ -158,6 +179,7 @@ def export_pdf(plan: ProjectPlan, results: list[YearResult], path: str | Path) -
 
     if not results:
         raise ValueError("PDFを作成する前に計算を実行してください。")
+    _ensure_qt_application()
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     insight = analyze_plan(plan, results)
