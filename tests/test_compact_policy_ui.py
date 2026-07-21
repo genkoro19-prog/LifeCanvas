@@ -4,6 +4,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 
+from lifecanvas.completion_audit import install_completion_audit
 from lifecanvas.detailed_settings import CollapsibleSection, DetailedSettingsPage
 from lifecanvas.guided_ui import LifeCanvasWindow
 from lifecanvas.models import PersonalDebt
@@ -15,6 +16,7 @@ from lifecanvas.wheel_guard import InputWheelGuard
 def test_guided_window_exposes_compact_detail_and_policy_editors():
     app = QApplication.instance() or QApplication([])
     window = LifeCanvasWindow()
+    install_completion_audit(window)
     try:
         assert window.tabs.tabText(1) == "かんたん入力"
         assert window.tabs.tabText(2) == "詳細設定"
@@ -39,6 +41,16 @@ def test_guided_window_exposes_compact_detail_and_policy_editors():
         assert window.personal_debt_editor is not None
         assert isinstance(app.property("lifecanvasInputWheelGuard"), InputWheelGuard)
         assert hasattr(window, "_completion_audit_controller")
+
+        # A concrete details-page value must reach the plan and results through
+        # the same button the user presses in the packaged application.
+        previous_results = window.results
+        window.wallet_editor.husband_target_cash.set_value(4_200_000)
+        window.detailed_settings.recalculate_button.click()
+        app.processEvents()
+        assert window.plan.wallets.husband_target_cash == 4_200_000
+        assert window.results is not previous_results
+        assert window.detailed_settings.status.text() == "反映済み"
     finally:
         window.close()
 
