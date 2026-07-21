@@ -36,6 +36,7 @@ class CompletionAuditController:
         self.original_apply_guided = window._apply_guided_input
         self._syncing = False
         self._guided_applying = False
+        self._recalc_source: str | None = None
 
         window._schedule_refresh = MethodType(self._schedule_refresh, window)
         window.recalculate = MethodType(self._recalculate, window)
@@ -59,8 +60,6 @@ class CompletionAuditController:
                 current = current.parentWidget()
             return False
 
-        # Text and combo inputs were already partly wired by older UI layers.
-        # Reconnect every non-guided control to one audited refresh path.
         for edit in window.findChildren(QLineEdit):
             if guided is not None and inside(edit, guided):
                 continue
@@ -79,8 +78,6 @@ class CompletionAuditController:
             _safe_disconnect(combo.currentIndexChanged, new_schedule)
             combo.currentIndexChanged.connect(new_schedule)
 
-        # This was the main missing path: most money, age, rate and year fields
-        # are spin boxes rather than QLineEdit widgets.
         for spin in window.findChildren(QAbstractSpinBox):
             if guided is not None and inside(spin, guided):
                 continue
@@ -150,11 +147,13 @@ class CompletionAuditController:
         detailed = getattr(self.window, "detailed_settings", None)
         if detailed is not None:
             detailed.status.setText("再計算しています…")
-        if self.window.recalculate():
-            if detailed is not None:
-                detailed.status.setText("反映済み")
-        elif detailed is not None:
-            detailed.status.setText("入力エラー")
+        self._recalc_source = "detailed"
+        try:
+            success = self.window.recalculate()
+        finally:
+            self._recalc_source = None
+        if detailed is not None:
+            detailed.status.setText("反映済み" if success else "入力エラー")
 
     def _schedule_refresh(self, window, *_args) -> None:
         if self._syncing or self._guided_applying:
@@ -198,7 +197,12 @@ class CompletionAuditController:
             guided = getattr(window, "guided_input", None)
             tabs = getattr(window, "tabs", None)
             on_guided_page = guided is not None and tabs is not None and tabs.currentWidget() is guided
-            if on_guided_page and not self._guided_applying:
+            should_apply_guided = (
+                on_guided_page
+                and self._recalc_source != "detailed"
+                and not self._guided_applying
+            )
+            if should_apply_guided:
                 self._guided_applying = True
                 try:
                     self._apply_current_guided_values()
@@ -229,7 +233,6 @@ class CompletionAuditController:
         return True
 
     def _export_report(self, window) -> None:
-        # Always apply current controls before generating the report.
         if not window.recalculate():
             return
         self.original_export_report()
