@@ -9,6 +9,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .legacy_sync_guard import install_legacy_sync_guard
+from .policy_audit import install_policy_audit
+
+# GuidedUI imports this module before constructing the window, so audited
+# calculation behavior and legacy-plan compatibility are active from the first
+# dashboard calculation.
+install_policy_audit()
+install_legacy_sync_guard()
+
 
 class InputWheelGuard(QObject):
     """Prevent wheel changes on selectors while preserving page scrolling."""
@@ -55,4 +64,11 @@ def install_input_wheel_guard(root: QWidget | QApplication) -> InputWheelGuard:
         targets.extend(container.findChildren(QComboBox))
         for target in targets:
             target.installEventFilter(guard)
+
+        # GuidedUI calls this installer after all tabs and editors exist. Hook the
+        # completion audit here so the audit remains independent of constructor order.
+        if hasattr(container, "guided_input") and hasattr(container, "detailed_settings"):
+            from .completion_audit import install_completion_audit
+
+            install_completion_audit(container)
     return guard

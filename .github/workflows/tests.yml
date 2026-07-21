@@ -13,7 +13,7 @@ permissions:
 jobs:
   test-and-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -27,10 +27,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip -q
           pip install -e ".[dev]" -q
-      - name: Run tests
+      - name: Run tests in isolated processes
         id: pytest
         continue-on-error: true
-        run: pytest > pytest.log 2>&1
+        shell: bash
+        run: |
+          : > pytest.log
+          for test_file in tests/test_*.py; do
+            echo "===== ${test_file} =====" | tee -a pytest.log
+            if ! pytest -q "${test_file}" >> pytest.log 2>&1; then
+              echo "FAILED_FILE=${test_file}" | tee -a pytest.log
+              exit 1
+            fi
+          done
+      - name: Upload pytest diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-diagnostic-${{ github.run_id }}
+          path: pytest.log
+          if-no-files-found: error
+          retention-days: 7
       - name: Report test failure on PR
         if: steps.pytest.outcome == 'failure' && github.event_name == 'pull_request'
         env:
@@ -38,7 +55,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           {
-            echo '## CI pytest failure'
+            echo '## CI test failure'
             echo
             echo '```text'
             tail -c 50000 pytest.log
@@ -48,10 +65,11 @@ jobs:
       - name: Stop after test failure
         if: steps.pytest.outcome == 'failure'
         run: |
-          cat pytest.log
+          tail -c 50000 pytest.log
           exit 1
-      - run: python -m compileall -q src main.py
-      - name: Smoke-test the guided PC window
+      - name: Compile Python sources
+        run: python -m compileall -q src main.py
+      - name: Smoke-test the guided PC window and PDF graph
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -60,7 +78,7 @@ jobs:
           from PySide6.QtWidgets import QApplication, QScrollArea
           from PySide6.QtCore import Qt, QCoreApplication
           from lifecanvas.guided_ui import LifeCanvasWindow
-          from lifecanvas.pdf_report_v2 import export_pdf
+          from lifecanvas.pdf_report_v2 import _chart_png_bytes, export_pdf
           from lifecanvas.plotting import configure_japanese_matplotlib
 
           app = QApplication([])
@@ -88,9 +106,14 @@ jobs:
           assert hasattr(window, "card_outlook")
           assert window.figure.axes[0].get_title() == "資産・負債の推移"
           assert configure_japanese_matplotlib() == "Noto Sans CJK JP"
+
+          chart_png = _chart_png_bytes(window.results, window.plan.wallets.mode == "separate")
+          assert chart_png.startswith(b"\x89PNG\r\n\x1a\n")
+          assert len(chart_png) > 20_000
           with TemporaryDirectory() as directory:
               report = export_pdf(window.plan, window.results, Path(directory) / "report.pdf")
-              assert report.exists() and report.stat().st_size > 10000
+              assert report.exists() and report.stat().st_size > 80_000
+
           window.close()
           window.deleteLater()
           QCoreApplication.sendPostedEvents(None, 0)
@@ -98,5 +121,5 @@ jobs:
           del window
           app.quit()
           del app
-          print("Guided PC UI smoke OK")
+          print("Guided PC UI and PDF smoke OK")
           PY

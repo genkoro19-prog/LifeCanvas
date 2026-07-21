@@ -3,8 +3,20 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from lifecanvas.guided_ui import run_app
+from PySide6.QtWidgets import QApplication
+
+from lifecanvas.policy_audit import install_policy_audit
+from lifecanvas.release_window import LifeCanvasWindow
+
+
+def main() -> None:
+    # Patch supported calculation rules before the first dashboard calculation.
+    install_policy_audit()
+    app = QApplication.instance() or QApplication([])
+    window = LifeCanvasWindow()
+    window.show()
+    app.exec()
 
 
 if __name__ == "__main__":
-    run_app()
+    main()

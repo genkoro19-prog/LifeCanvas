@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QGroupBox,
@@ -17,6 +17,8 @@ from .models import CashFlowEvent, ProjectPlan
 
 
 class CashFlowEventEditor(QGroupBox):
+    changed = Signal()
+
     FLOW_TYPES = (("支出", "expense"), ("収入", "income"))
     CATEGORIES = (
         ("家族", "family"),
@@ -29,6 +31,7 @@ class CashFlowEventEditor(QGroupBox):
 
     def __init__(self, plan: ProjectPlan):
         super().__init__("自由なライフイベント（臨時収入・臨時支出）")
+        self._loading = False
         self.start_year = plan.start_year
         self.simulation_years = plan.simulation_years
         layout = QVBoxLayout(self)
@@ -51,7 +54,7 @@ class CashFlowEventEditor(QGroupBox):
         buttons = QHBoxLayout()
         add_button = QPushButton("イベントを追加")
         remove_button = QPushButton("選択行を削除")
-        add_button.clicked.connect(self.add_row)
+        add_button.clicked.connect(lambda _checked=False: self.add_row())
         remove_button.clicked.connect(self.remove_selected)
         buttons.addWidget(add_button)
         buttons.addWidget(remove_button)
@@ -59,19 +62,24 @@ class CashFlowEventEditor(QGroupBox):
         layout.addLayout(buttons)
         self.load(plan)
 
-    @staticmethod
-    def _edit(value: str | int | float = "") -> QLineEdit:
+    def _emit_changed(self, *_args) -> None:
+        if not self._loading:
+            self.changed.emit()
+
+    def _edit(self, value: str | int | float = "", *, right: bool = True) -> QLineEdit:
         edit = QLineEdit(str(value))
-        edit.setAlignment(Qt.AlignRight)
+        if right:
+            edit.setAlignment(Qt.AlignRight)
+        edit.editingFinished.connect(self._emit_changed)
         return edit
 
-    @staticmethod
-    def _combo(options: tuple[tuple[str, str], ...], selected: str) -> QComboBox:
+    def _combo(self, options: tuple[tuple[str, str], ...], selected: str) -> QComboBox:
         combo = QComboBox()
         for label, value in options:
             combo.addItem(label, value)
         index = combo.findData(selected)
         combo.setCurrentIndex(max(0, index))
+        combo.currentIndexChanged.connect(self._emit_changed)
         return combo
 
     def add_row(self, event: CashFlowEvent | None = None) -> None:
@@ -92,22 +100,31 @@ class CashFlowEventEditor(QGroupBox):
         self.table.setCellWidget(
             row,
             3,
-            QLineEdit(event.label if event else "新しいイベント"),
+            self._edit(event.label if event else "新しいイベント", right=False),
         )
         amount = f"{event.amount:,.0f}" if event else "0"
         self.table.setCellWidget(row, 4, self._edit(amount))
+        self._emit_changed()
 
     def remove_selected(self) -> None:
         rows = sorted({index.row() for index in self.table.selectedIndexes()}, reverse=True)
+        if not rows and self.table.currentRow() >= 0:
+            rows = [self.table.currentRow()]
         for row in rows:
             self.table.removeRow(row)
+        if rows:
+            self._emit_changed()
 
     def load(self, plan: ProjectPlan) -> None:
-        self.start_year = plan.start_year
-        self.simulation_years = plan.simulation_years
-        self.table.setRowCount(0)
-        for event in plan.cashflow_events:
-            self.add_row(event)
+        self._loading = True
+        try:
+            self.start_year = plan.start_year
+            self.simulation_years = plan.simulation_years
+            self.table.setRowCount(0)
+            for event in plan.cashflow_events:
+                self.add_row(event)
+        finally:
+            self._loading = False
 
     @staticmethod
     def _number(edit: QLineEdit) -> float:
@@ -121,7 +138,7 @@ class CashFlowEventEditor(QGroupBox):
                 year = int(self._number(self.table.cellWidget(row, 0)))
                 amount = self._number(self.table.cellWidget(row, 4))
             except (TypeError, ValueError) as exc:
-                raise ValueError("ライフイベントの年と金額は数字で入力してください。") from exc
+                raise ValueError(f"ライフイベント{row + 1}行目の年と金額は数字で入力してください。") from exc
             if not self.start_year <= year <= last_year:
                 raise ValueError(
                     f"ライフイベントの年は{self.start_year}〜{last_year}年で入力してください。"
