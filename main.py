@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 from PySide6.QtWidgets import QApplication
 
 from lifecanvas.policy_audit import install_policy_audit
-from lifecanvas.guided_ui import LifeCanvasWindow
+from lifecanvas.release_window import LifeCanvasWindow
 
 
 def main() -> None:
