@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QStackedWidget,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -172,8 +173,18 @@ class DetailedSettingsPage(QWidget):
 
     def _request_recalculation(self) -> None:
         self.status.setText("再計算しています…")
-        self.recalculateRequested.emit()
         top_level = self.window()
+
+        # Ensure the detailed settings are the active input source. This avoids
+        # a stale guided-input page overwriting values when the action is
+        # triggered programmatically or through a keyboard shortcut.
+        tabs = getattr(top_level, "tabs", None)
+        if isinstance(tabs, QTabWidget):
+            index = tabs.indexOf(self)
+            if index >= 0:
+                tabs.setCurrentIndex(index)
+
+        self.recalculateRequested.emit()
         recalculate = getattr(top_level, "recalculate", None)
         if callable(recalculate):
             recalculate()
