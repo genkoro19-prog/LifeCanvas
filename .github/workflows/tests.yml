@@ -35,16 +35,15 @@ jobs:
         if: steps.pytest.outcome == 'failure' && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           {
-            echo '## CI pytest failure'
+            echo '## Current CI diagnostic'
             echo
             echo '```text'
             cat pytest.log
             echo '```'
           } > pytest-comment.md
-          gh pr comment "$PR_NUMBER" --body-file pytest-comment.md
+          gh api --method PATCH repos/${{ github.repository }}/issues/comments/5029213638 -F body=@pytest-comment.md
       - name: Stop after test failure
         if: steps.pytest.outcome == 'failure'
         run: |
