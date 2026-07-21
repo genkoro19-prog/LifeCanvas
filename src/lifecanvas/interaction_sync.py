@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QObject, QTimer
-from PySide6.QtWidgets import QAbstractButton, QComboBox, QLineEdit, QWidget
+from PySide6.QtCore import QObject, QTimer
+from PySide6.QtWidgets import QPushButton, QWidget
 
 
 class DetailedSettingsInteractionSync(QObject):
-    """Keep dynamically-created detailed-setting controls in the recalculation loop.
+    """Schedule recalculation after detailed-setting action buttons run.
 
-    Editors add/remove table rows after the main window has connected its original
-    signals. This event filter catches those later controls as well, without relying
-    on every editor to remember to emit a custom changed signal.
+    Add/remove buttons are created with the editors, but many of them do not emit a
+    common top-level signal. Connecting the existing buttons directly is safer than
+    installing event filters on every Qt child object and still catches the actions
+    users reported as not being reflected.
     """
 
     def __init__(self, window, detailed_page: QWidget):
@@ -17,19 +18,16 @@ class DetailedSettingsInteractionSync(QObject):
         self.window = window
         self.detailed_page = detailed_page
         self._pending = False
-        detailed_page.installEventFilter(self)
-        for child in detailed_page.findChildren(QWidget):
-            child.installEventFilter(self)
+        self._buttons: list[QPushButton] = []
 
-    def _inside_details(self, widget: QWidget) -> bool:
-        current: QWidget | None = widget
-        while current is not None:
-            if current is self.detailed_page:
-                return True
-            current = current.parentWidget()
-        return False
+        recalculate_button = getattr(detailed_page, "recalculate_button", None)
+        for button in detailed_page.findChildren(QPushButton):
+            if button is recalculate_button:
+                continue
+            button.clicked.connect(self._schedule)
+            self._buttons.append(button)
 
-    def _schedule(self) -> None:
+    def _schedule(self, *_args) -> None:
         if self._pending:
             return
         self._pending = True
@@ -39,33 +37,13 @@ class DetailedSettingsInteractionSync(QObject):
             schedule = getattr(self.window, "_schedule_refresh", None)
             if callable(schedule):
                 schedule()
-            else:
-                recalculate = getattr(self.window, "recalculate", None)
-                if callable(recalculate):
-                    recalculate()
+                return
+            recalculate = getattr(self.window, "recalculate", None)
+            if callable(recalculate):
+                recalculate()
 
-        # Run after the clicked button has finished adding/removing/editing rows.
+        # Let the editor finish adding/removing rows before reading all values.
         QTimer.singleShot(0, run)
-
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if event.type() == QEvent.ChildAdded:
-            child = event.child()
-            if isinstance(child, QWidget):
-                child.installEventFilter(self)
-                for descendant in child.findChildren(QWidget):
-                    descendant.installEventFilter(self)
-            return False
-
-        if not isinstance(watched, QWidget) or not self._inside_details(watched):
-            return False
-
-        if event.type() == QEvent.FocusOut and isinstance(watched, (QLineEdit, QComboBox)):
-            self._schedule()
-        elif event.type() == QEvent.MouseButtonRelease and isinstance(
-            watched, (QAbstractButton, QComboBox)
-        ):
-            self._schedule()
-        return False
 
 
 def install_detailed_settings_interaction_sync(window, detailed_page: QWidget):
