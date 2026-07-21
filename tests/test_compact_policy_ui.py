@@ -38,11 +38,12 @@ def test_guided_window_exposes_compact_detail_and_policy_editors():
         assert window.quick_policy.wife_target.value() == window.plan.wallets.wife_target_cash
         assert window.personal_debt_editor is not None
         assert isinstance(app.property("lifecanvasInputWheelGuard"), InputWheelGuard)
+        assert hasattr(window, "_completion_audit_controller")
     finally:
         window.close()
 
 
-def test_debt_quick_editor_preserves_detailed_assumptions():
+def test_debt_quick_editor_migrates_unsupported_repayment_mode_and_preserves_details():
     app = QApplication.instance() or QApplication([])
     plan = build_genki_family_plan()
     plan.personal_debts = [
@@ -67,7 +68,7 @@ def test_debt_quick_editor_preserves_detailed_assumptions():
         assert restored.current_balance == 1_200_000
         assert restored.principal == 1_500_000
         assert restored.annual_interest_rate == 1.25
-        assert restored.repayment_method == "equal_payment"
+        assert restored.repayment_method == "fixed"
         assert restored.bonus_payment == 20_000
         assert restored.payment_source == "spouse"
         assert restored.notes == "育休中は夫が補填"
